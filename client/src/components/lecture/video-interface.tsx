@@ -9,6 +9,7 @@ import { webSocketClient } from "@/lib/websocket";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import Peer from "simple-peer";
+import type SimplePeer from "simple-peer";
 
 type VideoInterfaceProps = {
   lectureId: number;
@@ -26,7 +27,7 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>("");
   const [selectedVideoDevice, setSelectedVideoDevice] = useState<string>("");
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [peers, setPeers] = useState<{ [key: number]: Peer.Instance }>({});
+  const [peers, setPeers] = useState<{ [key: number]: SimplePeer }>({});
   const [connectedPeers, setConnectedPeers] = useState<number[]>([]);
   
   const localVideoRef = useRef<HTMLVideoElement>(null);

@@ -1,0 +1,37 @@
+chunk-RPCDYKBN.js?v=14678f64:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+2simple-peer.js?v=14678f64:2348 Module "events" has been externalized for browser compatibility. Cannot access "events.EventEmitter" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ simple-peer.js?v=14678f64:2348
+simple-peer.js?v=14678f64:2368 Module "util" has been externalized for browser compatibility. Cannot access "util.debuglog" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ simple-peer.js?v=14678f64:2368
+simple-peer.js?v=14678f64:2368 Module "util" has been externalized for browser compatibility. Cannot access "util.inspect" in client code. See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+get @ simple-peer.js?v=14678f64:2368
+lecture.tsx:90 Initializing WebSocket connection Object
+websocket.ts:29 WebSocket connection established
+lecture.tsx:96 WebSocket connected, authenticating user 1
+2websocket.ts:90 Authentication request sent for user 1
+websocket.ts:46 Raw WebSocket message received: {"type":"auth_response","payload":{"success":true,"userId":1}}
+websocket.ts:48 Parsed WebSocket message: Object
+websocket.ts:51 Emitting event: auth_response
+lecture.tsx:101 Auth response received Object
+lecture.tsx:103 Authentication successful, joining lecture 1
+websocket.ts:112 Join lecture request sent for lecture 1
+websocket.ts:46 Raw WebSocket message received: {"type":"auth_response","payload":{"success":true,"userId":1}}
+websocket.ts:48 Parsed WebSocket message: Object
+websocket.ts:51 Emitting event: auth_response
+lecture.tsx:101 Auth response received Object
+lecture.tsx:103 Authentication successful, joining lecture 1
+websocket.ts:112 Join lecture request sent for lecture 1
+websocket.ts:46 Raw WebSocket message received: {"type":"join_lecture_response","payload":{"success":true,"lectureId":1}}
+websocket.ts:48 Parsed WebSocket message: Object
+websocket.ts:51 Emitting event: join_lecture_response
+lecture.tsx:116 Join lecture response received Object
+websocket.ts:46 Raw WebSocket message received: {"type":"chat_history","payload":{"messages":[]}}
+websocket.ts:48 Parsed WebSocket message: Object
+websocket.ts:51 Emitting event: chat_history
+websocket.ts:46 Raw WebSocket message received: {"type":"join_lecture_response","payload":{"success":true,"lectureId":1}}
+websocket.ts:48 Parsed WebSocket message: Object
+websocket.ts:51 Emitting event: join_lecture_response
+lecture.tsx:116 Join lecture response received Object
+websocket.ts:46 Raw WebSocket message received: {"type":"chat_history","payload":{"messages":[]}}
+websocket.ts:48 Parsed WebSocket message: Object
+websocket.ts:51 Emitting event: chat_history

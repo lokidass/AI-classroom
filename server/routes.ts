@@ -202,6 +202,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(err);
     }
   });
+  // Get a specific lecture by ID
+  app.get("/api/lectures/:lectureId", isAuthenticated, async (req, res, next) => {
+    try {
+      const lectureId = parseInt(req.params.lectureId);
+      if (isNaN(lectureId)) {
+        return res.status(400).json({ message: "Invalid lecture ID" });
+      }
+      
+      const lecture = await storage.getLecture(lectureId);
+      if (!lecture) {
+        return res.status(404).json({ message: "Lecture not found" });
+      }
+      
+      // Check if user has access to the lecture's classroom
+      const classroom = await storage.getClassroom(lecture.classroomId);
+      if (!classroom) {
+        return res.status(404).json({ message: "Classroom not found" });
+      }
+      
+      const hasAccess = await storage.isUserInClassroom(req.user!.id, lecture.classroomId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "You don't have access to this lecture" });
+      }
+      
+      return res.json(lecture);
+    } catch (error) {
+      next(error);
+    }
+  });
   
   app.post("/api/lectures/:lectureId/end", isTeacher, async (req, res, next) => {
     try {

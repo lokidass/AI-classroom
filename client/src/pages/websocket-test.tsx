@@ -6,6 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function WebSocketTestPage() {
   const { user } = useAuth();
@@ -15,6 +17,11 @@ export default function WebSocketTestPage() {
   const [testText, setTestText] = useState("This is a test of the note generation system. The human brain processes visual information faster than text. Colors can influence emotions and decision-making. Learning styles vary among individuals. Memory retention improves with repeated exposure to information over time.");
   const [userAuthStatus, setUserAuthStatus] = useState(false);
   const [fakeLectureId, setFakeLectureId] = useState<number>(1);
+  
+  // Direct Gemini API testing state
+  const [directTestPrompt, setDirectTestPrompt] = useState("Summarize the following in bullet points: The sky is blue because of the way atmosphere scatters light.");
+  const [selectedModel, setSelectedModel] = useState("gemini-1.0-pro");
+  const [isTestingApi, setIsTestingApi] = useState(false);
 
   useEffect(() => {
     // Listen for connection events
@@ -162,6 +169,48 @@ export default function WebSocketTestPage() {
       description: "A test transcription has been sent to generate notes.",
     });
   };
+  
+  // Handler for direct Gemini API testing
+  const handleDirectApiTest = async () => {
+    if (!directTestPrompt.trim()) {
+      toast({
+        title: "Empty prompt",
+        description: "Please enter a prompt to test",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    try {
+      setIsTestingApi(true);
+      addMessage(`Testing Gemini API directly with model: ${selectedModel}`);
+      addMessage(`Prompt: "${directTestPrompt.substring(0, 50)}..."`);
+      
+      const response = await apiRequest("POST", "/api/test/gemini", {
+        prompt: directTestPrompt,
+        model: selectedModel
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        addMessage(`API TEST SUCCESS with model ${result.model}`);
+        addMessage(`Response:\n${result.response}`);
+      } else {
+        addMessage(`API TEST FAILED with model ${result.model}`);
+        addMessage(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      addMessage(`Error testing API: ${error instanceof Error ? error.message : String(error)}`);
+      toast({
+        title: "API Test Failed",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive"
+      });
+    } finally {
+      setIsTestingApi(false);
+    }
+  };
 
   return (
     <div className="container mx-auto p-6">
@@ -299,34 +348,78 @@ export default function WebSocketTestPage() {
         </Card>
       </div>
       
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Gemini AI Test</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-4">
-            <Textarea 
-              value={testText}
-              onChange={(e) => setTestText(e.target.value)}
-              placeholder="Enter test transcription text"
-              className="min-h-[100px]"
-            />
-            <div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>WebSocket Gemini AI Test</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4">
+              <Textarea 
+                value={testText}
+                onChange={(e) => setTestText(e.target.value)}
+                placeholder="Enter test transcription text"
+                className="min-h-[100px]"
+              />
+              <div>
+                <Button 
+                  onClick={handleTestTranscription}
+                  disabled={!webSocketClient.lectureId || testText.trim().length < 10}
+                  className="w-full"
+                >
+                  Send Test Transcription for Note Generation
+                </Button>
+                <p className="text-sm text-muted-foreground mt-2">
+                  This will send the text above to the server, which will process it through Gemini API
+                  and return generated lecture notes. Make sure you've authenticated and joined a lecture first.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Direct Gemini API Test</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium">Test Model:</label>
+                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <SelectTrigger>
+                    <SelectValue>{selectedModel}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gemini-1.0-pro">gemini-1.0-pro</SelectItem>
+                    <SelectItem value="gemini-pro">gemini-pro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <Textarea 
+                value={directTestPrompt}
+                onChange={(e) => setDirectTestPrompt(e.target.value)}
+                placeholder="Enter prompt to test Gemini API directly"
+                className="min-h-[100px]"
+              />
+              
               <Button 
-                onClick={handleTestTranscription}
-                disabled={!webSocketClient.lectureId || testText.trim().length < 10}
+                onClick={handleDirectApiTest}
+                disabled={isTestingApi || directTestPrompt.trim().length < 5}
                 className="w-full"
               >
-                Send Test Transcription for Note Generation
+                {isTestingApi ? "Testing..." : "Test Gemini API Directly"}
               </Button>
+              
               <p className="text-sm text-muted-foreground mt-2">
-                This will send the text above to the server, which will process it through Gemini API
-                and return generated lecture notes. Make sure you've authenticated and joined a lecture first.
+                This bypasses the WebSocket and directly tests the Gemini API with different model configurations.
+                Use this to diagnose API connectivity issues.
               </p>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
       
       <Card>
         <CardHeader>

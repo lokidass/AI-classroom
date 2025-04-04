@@ -1,5 +1,14 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+/**
+ * Note on Gemini API versions:
+ * The Google Generative AI package defaults to using v1beta API version.
+ * With this version, we need to use "gemini-1.0-pro" as the model name
+ * instead of "gemini-pro" to avoid 404 errors.
+ * 
+ * See error: "models/gemini-pro is not found for API version v1beta, or is not supported for generateContent"
+ */
+
 // Initialize the Generative AI API with the API key
 const API_KEY = process.env.GEMINI_API_KEY || "";
 if (!API_KEY) {
@@ -21,8 +30,9 @@ export async function generateNotesFromTranscription(transcription: string) {
   }
 
   try {
-    // Get the gemini-pro model
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    // Get the appropriate gemini model
+    // Using gemini-1.0-pro since the v1beta API version doesn't support the gemini-pro model name
+    const model = genAI.getGenerativeModel({ model: "gemini-1.0-pro" });
 
     // Prepare the prompt for note generation
     const prompt = `
@@ -65,8 +75,9 @@ export async function answerQuestion(question: string, lectureContext?: string) 
   }
 
   try {
-    // Get the gemini-pro model
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    // Get the appropriate gemini model
+    // Using gemini-1.0-pro since the v1beta API version doesn't support the gemini-pro model name
+    const model = genAI.getGenerativeModel({ model: "gemini-1.0-pro" });
 
     // Prepare the prompt based on whether lecture context is provided
     let prompt = "";
@@ -109,6 +120,46 @@ export async function answerQuestion(question: string, lectureContext?: string) 
 }
 
 // Function to process transcription segments and extract meaningful content
+// Test function to diagnose API issues with different model configurations
+export async function testGeminiApi(prompt: string, modelName?: string) {
+  if (!API_KEY) {
+    console.error("No Gemini API key provided. Please set the GEMINI_API_KEY environment variable.");
+    return "Error: No Gemini API key provided. Please set the GEMINI_API_KEY environment variable.";
+  }
+
+  try {
+    // Use provided model name or default to our fix
+    const modelToUse = modelName || "gemini-1.0-pro";
+    console.log(`Testing Gemini API with model: ${modelToUse}`);
+    
+    const model = genAI.getGenerativeModel({ model: modelToUse });
+    
+    // Generate the response
+    console.log(`Sending test prompt: "${prompt.substring(0, 50)}..."`);
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    console.log("Successfully received response from Gemini API");
+    return {
+      success: true,
+      model: modelToUse,
+      response: response.text()
+    };
+  } catch (error) {
+    console.error(`Error testing Gemini API with model ${modelName || "gemini-1.0-pro"}:`, error);
+    // More detailed error information for debugging
+    const errorMessage = error instanceof Error 
+      ? `Error: ${error.name}: ${error.message}` 
+      : "Unknown error occurred";
+    console.error("Detailed error:", errorMessage);
+    
+    return {
+      success: false,
+      model: modelName || "gemini-1.0-pro",
+      error: errorMessage
+    };
+  }
+}
+
 export async function processTranscription(transcriptionSegments: string[], previousNotes?: string) {
   if (!API_KEY) {
     console.error("No Gemini API key provided. Please set the GEMINI_API_KEY environment variable.");
@@ -122,8 +173,9 @@ export async function processTranscription(transcriptionSegments: string[], prev
       return previousNotes || "Waiting for more content to generate notes...";
     }
 
-    // Get the gemini-pro model
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    // Get the appropriate gemini model
+    // Using gemini-1.0-pro since the v1beta API version doesn't support the gemini-pro model name
+    const model = genAI.getGenerativeModel({ model: "gemini-1.0-pro" });
 
     // Prepare the prompt based on whether previous notes exist
     let prompt = "";

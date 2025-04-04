@@ -1,0 +1,26 @@
+Detailed error: Error: Error: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+Generated note content: Error generating notes. Please try again later....
+No new note content generated or content matched previous notes
+7:21:33 PM [express] GET /api/lectures/1/notes 304 in 1ms :: [{"lectureId":1,"content":"Error genera…
+7:21:37 PM [express] GET /api/lectures/1 304 in 1ms :: {"classroomId":1,"title":"new Lecture","descr…
+Received message of type: transcription
+Received transcription: "This is a test of the note generation system. The human brain processes visual information faster than text. Colors can influence emotions and decision-making. Learning styles vary among individuals. Memory retention improves with repeated exposure to information over time.", isFinal: true
+Transcription is final and has content, processing...
+Processing transcription with Gemini API...
+Text to process: This is a test of the note generation system. The human brain processes visual information faster than text. Colors can influence emotions and decision-making. Learning styles vary among individuals. Memory retention improves with repeated exposure to information over time.
+Using previous note content: Yes (length: 47)
+Error processing transcription with Gemini API: GoogleGenerativeAIFetchError: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+    at handleResponseNotOk (file:///home/runner/workspace/node_modules/@google/generative-ai/dist/index.mjs:432:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async makeRequest (file:///home/runner/workspace/node_modules/@google/generative-ai/dist/index.mjs:401:9)
+    at async generateContent (file:///home/runner/workspace/node_modules/@google/generative-ai/dist/index.mjs:865:22)
+    at async processTranscription (/home/runner/workspace/server/gemini.ts:157:20)
+    at async WebSocket.<anonymous> (/home/runner/workspace/server/websocket.ts:315:39) {
+  status: 404,
+  statusText: 'Not Found',
+  errorDetails: undefined
+}
+Detailed error: Error: Error: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent: [404 Not Found] models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+Generated note content: Error generating notes. Please try again later....
+No new note content generated or content matched previous notes
+7:22:07 PM [express] GET /api/lectures/1 304 in 1ms :: {"classroomId":1,"title":"new Lecture","descr…

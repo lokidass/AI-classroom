@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { 
   Mic, MicOff, Video as VideoIcon, VideoOff, 
   PhoneOff, Share, Users, MessageSquare, Volume2, VolumeX,
@@ -387,6 +388,29 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
     }
   };
   
+  // State for manual transcription input
+  const [manualTranscript, setManualTranscript] = useState("");
+  const [showManualInput, setShowManualInput] = useState(false);
+
+  // Function to submit manual transcription
+  const submitManualTranscript = () => {
+    if (manualTranscript.trim()) {
+      console.log(`Sending manual transcription: "${manualTranscript}"`);
+      webSocketClient.sendTranscription(manualTranscript, true);
+      
+      // Add to transcript history
+      transcriptRef.current.push(manualTranscript);
+      
+      // Clear the input
+      setManualTranscript("");
+      
+      toast({
+        title: "Transcription Sent",
+        description: "Your manual transcription has been sent for note generation.",
+      });
+    }
+  };
+  
   // Create a separate function to set up the speech recognition instance
   const setupSpeechRecognition = () => {
     // Check if SpeechRecognition is available
@@ -394,10 +418,11 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
     
     if (!SpeechRecognition) {
       toast({
-        title: "Not Supported",
-        description: "Speech recognition is not supported in your browser.",
-        variant: "destructive",
+        title: "Speech Recognition Not Supported",
+        description: "Speech recognition is not supported in your browser. You can use manual transcription instead.",
+        duration: 5000,
       });
+      setShowManualInput(true);
       return false;
     }
     
@@ -528,11 +553,12 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
             }
           }, retryDelay);
           
-          // Add manual transcription option after several network errors
-          if (networkRetryCountRef.current === 10) {
+          // Enable manual transcription option after several network errors
+          if (networkRetryCountRef.current === 5) {
+            setShowManualInput(true);
             toast({
               title: "Speech Recognition Issues",
-              description: "Automatic transcription is having difficulty. You can still record the lecture and manually transcribe later.",
+              description: "Automatic transcription is having difficulty. Manual transcription mode has been enabled as a fallback.",
               duration: 10000,
             });
           }
@@ -956,7 +982,47 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
         >
           <PhoneOff className="h-5 w-5" />
         </Button>
+        
+        {isTeacher && (
+          <Button
+            variant="outline"
+            onClick={() => setShowManualInput(prev => !prev)}
+            className="rounded-full"
+            title="Toggle Manual Transcription Input"
+          >
+            Manual Input
+          </Button>
+        )}
       </div>
+      
+      {/* Manual Transcription Input */}
+      {isTeacher && showManualInput && (
+        <div className="mt-4 p-4 border border-border rounded-lg bg-card">
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">
+              Manual Transcription
+              <span className="text-xs text-muted-foreground ml-2">
+                Type your lecture content here to generate notes
+              </span>
+            </label>
+            <div className="flex gap-2">
+              <Textarea
+                value={manualTranscript}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setManualTranscript(e.target.value)}
+                placeholder="Enter lecture content to generate AI notes..."
+                className="min-h-[80px] flex-grow"
+              />
+              <Button 
+                onClick={submitManualTranscript}
+                disabled={!manualTranscript.trim()}
+                className="self-end"
+              >
+                Generate Notes
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

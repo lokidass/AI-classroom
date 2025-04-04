@@ -519,49 +519,71 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
           
           networkRetryCountRef.current += 1;
           
-          // Only show toast on first and fifth error to avoid flooding UI
-          if (networkRetryCountRef.current === 1 || networkRetryCountRef.current % 5 === 0) {
+          // Calculate retry delay with exponential backoff (max 15 seconds)
+          const retryDelay = Math.min(1000 * Math.pow(1.5, Math.min(networkRetryCountRef.current, 8)), 15000);
+          
+          // Only show toast at specific meaningful points to avoid flooding the UI
+          if (networkRetryCountRef.current === 1) {
             toast({
               title: "Transcription Network Issue",
-              description: "The speech recognition service encountered network issues. Will continue to retry.",
+              description: "The speech recognition service is connecting. Please continue speaking.",
+              duration: 3000,
+            });
+          } else if (networkRetryCountRef.current === 5) {
+            toast({
+              title: "Speech Recognition Issues",
+              description: "Connectivity issues detected. The system will continue trying to transcribe automatically.",
+              duration: 10000,
+            });
+          } else if (networkRetryCountRef.current === 15) {
+            toast({
+              title: "Persistent Network Issues",
+              description: "Speech recognition is experiencing persistent connection problems. Please ensure your microphone is working correctly.",
+              variant: "destructive",
+              duration: 10000,
             });
           }
           
-          // Always retry with increasing delay
-          const retryDelay = Math.min(1000 * Math.pow(1.5, Math.min(networkRetryCountRef.current, 5)), 10000);
-          recognition.stop();
-          
           console.log(`Speech recognition network error #${networkRetryCountRef.current}, retrying in ${retryDelay}ms`);
+          
+          try {
+            recognition.stop();
+          } catch (e) {
+            // Ignore errors when stopping
+          }
           
           setTimeout(() => {
             // Only restart if transcription is still enabled
             if (isTranscribing) {
               try {
+                // First try restarting the existing instance
                 recognition.start();
                 console.log("Speech recognition restarted after network error");
               } catch (e) {
-                console.error("Failed to restart speech recognition:", e);
-                // If cannot restart, create a new recognition instance
+                console.error("Failed to restart recognition, creating new instance:", e);
+                
+                // If that fails, create a completely new recognition instance
                 if (setupSpeechRecognition() && recognitionRef.current) {
                   try {
                     recognitionRef.current.start();
+                    console.log("New speech recognition instance started successfully");
                   } catch (err) {
-                    console.error("Even new speech recognition instance failed to start:", err);
+                    console.error("New speech recognition instance also failed to start:", err);
+                    
+                    // If we hit a high error count, suggest checking hardware
+                    if (networkRetryCountRef.current > 20) {
+                      toast({
+                        title: "Speech Recognition Failed",
+                        description: "Please check your microphone and browser permissions. You can still use manual input if needed.",
+                        variant: "destructive",
+                        duration: 10000,
+                      });
+                    }
                   }
                 }
               }
             }
           }, retryDelay);
-          
-          // Enable manual transcription option after several network errors
-          if (networkRetryCountRef.current === 5) {
-            setShowManualInput(true);
-            toast({
-              title: "Speech Recognition Issues",
-              description: "Automatic transcription is having difficulty. Manual transcription mode has been enabled as a fallback.",
-              duration: 10000,
-            });
-          }
         } else {
           toast({
             title: "Transcription Error",
@@ -987,10 +1009,11 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
           <Button
             variant="outline"
             onClick={() => setShowManualInput(prev => !prev)}
-            className="rounded-full"
+            className="rounded-full text-xs"
+            size="sm"
             title="Toggle Manual Transcription Input"
           >
-            Manual Input
+            {showManualInput ? "Hide Manual Input" : "Show Manual Input"}
           </Button>
         )}
       </div>

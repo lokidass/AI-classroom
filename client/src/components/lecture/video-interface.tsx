@@ -388,28 +388,8 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
     }
   };
   
-  // State for manual transcription input
-  const [manualTranscript, setManualTranscript] = useState("");
-  const [showManualInput, setShowManualInput] = useState(false);
-
-  // Function to submit manual transcription
-  const submitManualTranscript = () => {
-    if (manualTranscript.trim()) {
-      console.log(`Sending manual transcription: "${manualTranscript}"`);
-      webSocketClient.sendTranscription(manualTranscript, true);
-      
-      // Add to transcript history
-      transcriptRef.current.push(manualTranscript);
-      
-      // Clear the input
-      setManualTranscript("");
-      
-      toast({
-        title: "Transcription Sent",
-        description: "Your manual transcription has been sent for note generation.",
-      });
-    }
-  };
+  // We're removing manual transcription as requested
+  // This implementation will focus solely on direct speech recognition
   
   // Create a separate function to set up the speech recognition instance
   const setupSpeechRecognition = () => {
@@ -419,10 +399,9 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
     if (!SpeechRecognition) {
       toast({
         title: "Speech Recognition Not Supported",
-        description: "Speech recognition is not supported in your browser. You can use manual transcription instead.",
+        description: "Speech recognition is not supported in your browser. Please try using a modern browser like Chrome or Edge.",
         duration: 5000,
       });
-      setShowManualInput(true);
       return false;
     }
     
@@ -574,7 +553,7 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
                     if (networkRetryCountRef.current > 20) {
                       toast({
                         title: "Speech Recognition Failed",
-                        description: "Please check your microphone and browser permissions. You can still use manual input if needed.",
+                        description: "Please check your microphone and browser permissions. The system will continue trying to reconnect.",
                         variant: "destructive",
                         duration: 10000,
                       });
@@ -1005,47 +984,7 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
           <PhoneOff className="h-5 w-5" />
         </Button>
         
-        {isTeacher && (
-          <Button
-            variant="outline"
-            onClick={() => setShowManualInput(prev => !prev)}
-            className="rounded-full text-xs"
-            size="sm"
-            title="Toggle Manual Transcription Input"
-          >
-            {showManualInput ? "Hide Manual Input" : "Show Manual Input"}
-          </Button>
-        )}
       </div>
-      
-      {/* Manual Transcription Input */}
-      {isTeacher && showManualInput && (
-        <div className="mt-4 p-4 border border-border rounded-lg bg-card">
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">
-              Manual Transcription
-              <span className="text-xs text-muted-foreground ml-2">
-                Type your lecture content here to generate notes
-              </span>
-            </label>
-            <div className="flex gap-2">
-              <Textarea
-                value={manualTranscript}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setManualTranscript(e.target.value)}
-                placeholder="Enter lecture content to generate AI notes..."
-                className="min-h-[80px] flex-grow"
-              />
-              <Button 
-                onClick={submitManualTranscript}
-                disabled={!manualTranscript.trim()}
-                className="self-end"
-              >
-                Generate Notes
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

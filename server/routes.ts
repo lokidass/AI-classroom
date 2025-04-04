@@ -20,7 +20,7 @@ function isAuthenticated(req: Express.Request, res: Express.Response, next: Expr
 }
 
 function isTeacher(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
-  if (req.isAuthenticated() && req.user.isTeacher) {
+  if (req.isAuthenticated() && req.user.role === "teacher") {
     return next();
   }
   res.status(403).json({ message: "Forbidden - Teacher role required" });
@@ -118,7 +118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const member = await storage.addMemberToClassroom({
         classroomId: classroom.id,
         userId: req.user.id,
-        role: req.user.isTeacher ? "teacher" : "student"
+        role: req.user.role === "teacher" ? "teacher" : "student"
       });
       
       res.status(201).json({ classroom, member });

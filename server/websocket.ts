@@ -35,28 +35,98 @@ export function setupWebSockets(httpServer: HttpServer) {
           case "auth":
             // Authenticate the client
             const { userId } = message.payload;
-            client.userId = userId;
             
-            // Send confirmation
-            ws.send(JSON.stringify({
-              type: "auth_response",
-              payload: { success: true }
-            }));
+            try {
+              // Verify the user exists
+              const user = await storage.getUser(userId);
+              
+              if (user) {
+                client.userId = userId;
+                
+                // Send confirmation
+                ws.send(JSON.stringify({
+                  type: "auth_response",
+                  payload: { success: true, userId }
+                }));
+                console.log(`User authenticated: ${userId}`);
+              } else {
+                // User not found
+                ws.send(JSON.stringify({
+                  type: "auth_response",
+                  payload: { success: false, error: "User not found" }
+                }));
+                console.log(`Authentication failed: User not found for ID ${userId}`);
+              }
+            } catch (error) {
+              console.error("Error during authentication:", error);
+              ws.send(JSON.stringify({
+                type: "auth_response",
+                payload: { success: false, error: "Authentication error" }
+              }));
+            }
             break;
           
           case "join_lecture":
             // Join a lecture room
+            if (!client.userId) {
+              ws.send(JSON.stringify({
+                type: "join_lecture_response",
+                payload: { 
+                  success: false, 
+                  error: "Not authenticated. Authenticate first before joining a lecture." 
+                }
+              }));
+              console.log("Join lecture failed: Not authenticated");
+              break;
+            }
+            
             const { lectureId } = message.payload;
-            client.lectureId = lectureId;
             
-            // Send confirmation
-            ws.send(JSON.stringify({
-              type: "join_lecture_response",
-              payload: { success: true, lectureId }
-            }));
-            
-            // Send existing messages
-            if (lectureId) {
+            try {
+              // Verify the lecture exists
+              const lecture = await storage.getLecture(lectureId);
+              
+              if (!lecture) {
+                ws.send(JSON.stringify({
+                  type: "join_lecture_response",
+                  payload: { 
+                    success: false, 
+                    error: "Lecture not found" 
+                  }
+                }));
+                console.log(`Join lecture failed: Lecture not found - ID ${lectureId}`);
+                break;
+              }
+              
+              // Verify user access to the lecture
+              const isUserInClassroom = await storage.isUserInClassroom(client.userId, lecture.classroomId);
+              
+              if (!isUserInClassroom) {
+                ws.send(JSON.stringify({
+                  type: "join_lecture_response",
+                  payload: { 
+                    success: false, 
+                    error: "You don't have access to this lecture" 
+                  }
+                }));
+                console.log(`Join lecture failed: User ${client.userId} does not have access to lecture ${lectureId}`);
+                break;
+              }
+              
+              // All checks passed, allow joining the lecture
+              client.lectureId = lectureId;
+              
+              // Send confirmation
+              ws.send(JSON.stringify({
+                type: "join_lecture_response",
+                payload: { 
+                  success: true, 
+                  lectureId 
+                }
+              }));
+              console.log(`User ${client.userId} joined lecture ${lectureId}`);
+              
+              // Send existing messages
               const messages = await storage.getMessagesByLecture(lectureId);
               
               // Fetch user details for each message
@@ -77,6 +147,16 @@ export function setupWebSockets(httpServer: HttpServer) {
               ws.send(JSON.stringify({
                 type: "chat_history",
                 payload: { messages: messagesWithUsers }
+              }));
+              
+            } catch (error) {
+              console.error("Error joining lecture:", error);
+              ws.send(JSON.stringify({
+                type: "join_lecture_response",
+                payload: { 
+                  success: false, 
+                  error: "Error joining lecture" 
+                }
               }));
             }
             break;

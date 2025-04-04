@@ -73,30 +73,79 @@ export default function LecturePage() {
   
   // Handle WebSocket connection
   useEffect(() => {
-    if (!user || !lectureId || wsInitialized.current) return;
+    if (!user || !lectureId) {
+      console.log("WebSocket initialization skipped:", { 
+        userPresent: !!user, 
+        lectureId: lectureId,
+        wsInitialized: wsInitialized.current 
+      });
+      return;
+    }
     
+    if (wsInitialized.current) {
+      console.log("WebSocket already initialized");
+      return;
+    }
+    
+    console.log("Initializing WebSocket connection", { userId: user.id, lectureId });
     wsInitialized.current = true;
     webSocketClient.connect();
     
     // Set up event listeners
     webSocketClient.on("connection", () => {
-      if (user) {
-        webSocketClient.authenticate(user.id);
-      }
+      console.log("WebSocket connected, authenticating user", user.id);
+      webSocketClient.authenticate(user.id);
     });
     
     webSocketClient.on("auth_response", (data) => {
+      console.log("Auth response received", data);
       if (data.success) {
+        console.log("Authentication successful, joining lecture", lectureId);
         webSocketClient.joinLecture(lectureId);
+      } else {
+        console.error("Authentication failed", data);
+        toast({
+          title: "Authentication Error",
+          description: data.error || "Failed to authenticate with the lecture server. Please try refreshing the page.",
+          variant: "destructive",
+        });
       }
     });
     
+    webSocketClient.on("join_lecture_response", (data) => {
+      console.log("Join lecture response received", data);
+      if (!data.success) {
+        toast({
+          title: "Lecture Access Error",
+          description: data.error || "Failed to join the lecture. Please check if the lecture exists and you have access to it.",
+          variant: "destructive",
+        });
+        // Redirect to classroom or dashboard if lecture access is denied
+        if (lecture?.classroomId) {
+          navigate(`/classroom/${lecture.classroomId}`);
+        } else {
+          navigate("/");
+        }
+      }
+    });
+    
+    // Add error handler
+    webSocketClient.on("error", (error) => {
+      console.error("WebSocket error", error);
+      toast({
+        title: "Connection Error",
+        description: "There was an error connecting to the lecture. Please try refreshing the page.",
+        variant: "destructive",
+      });
+    });
+    
     return () => {
+      console.log("Cleaning up WebSocket connection");
       if (webSocketClient.lectureId === lectureId) {
         webSocketClient.leaveLecture();
       }
     };
-  }, [user, lectureId]);
+  }, [user, lectureId, toast]);
   
   // Check if lecture has ended
   useEffect(() => {

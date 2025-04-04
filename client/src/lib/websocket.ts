@@ -87,15 +87,46 @@ export class WebSocketClient {
         type: "auth",
         payload: { userId }
       });
+      console.log(`Authentication request sent for user ${userId}`);
+    } else {
+      console.error("WebSocket not open when trying to authenticate, current state:", this.socket?.readyState);
+      // Queue authentication to happen when connection is established
+      this.once("connection", () => {
+        console.log("Connection established, now authenticating with queued user ID:", userId);
+        this.sendMessage({
+          type: "auth",
+          payload: { userId }
+        });
+      });
     }
   }
 
   joinLecture(lectureId: number) {
     this.lectureId = lectureId;
-    if (this.socket?.readyState === READY_STATE.OPEN && this.userId) {
-      this.sendMessage({
-        type: "join_lecture",
-        payload: { lectureId }
+    if (this.socket?.readyState === READY_STATE.OPEN) {
+      if (this.userId) {
+        this.sendMessage({
+          type: "join_lecture",
+          payload: { lectureId }
+        });
+        console.log(`Join lecture request sent for lecture ${lectureId}`);
+      } else {
+        console.error("Cannot join lecture: User is not authenticated");
+        this.emit("error", { 
+          message: "Authentication required before joining a lecture" 
+        });
+      }
+    } else {
+      console.error("WebSocket not open when trying to join lecture, current state:", this.socket?.readyState);
+      // Queue lecture join to happen after connection and authentication
+      this.once("auth_response", (data) => {
+        if (data.success) {
+          console.log("Authentication successful, now joining lecture with queued ID:", lectureId);
+          this.sendMessage({
+            type: "join_lecture",
+            payload: { lectureId }
+          });
+        }
       });
     }
   }
@@ -193,6 +224,18 @@ export class WebSocketClient {
       this.eventListeners.set(event, []);
     }
     this.eventListeners.get(event)?.push(callback);
+  }
+
+  // Listen for an event only once, then automatically remove the listener
+  once(event: string, callback: (data: any) => void) {
+    const onceCallback = (data: any) => {
+      // Remove this listener after it's called
+      this.off(event, onceCallback);
+      // Call the original callback
+      callback(data);
+    };
+    
+    this.on(event, onceCallback);
   }
 
   off(event: string, callback: (data: any) => void) {

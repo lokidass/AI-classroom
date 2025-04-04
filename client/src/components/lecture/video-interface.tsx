@@ -427,7 +427,7 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
           transcriptRef.current.push(lastResult);
           
           // Send transcription via WebSocket
-          webSocketClient.sendTranscription(lastResult);
+          webSocketClient.sendTranscription(lastResult, true);
         }
       };
       

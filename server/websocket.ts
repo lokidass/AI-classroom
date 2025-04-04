@@ -278,6 +278,48 @@ export function setupWebSockets(httpServer: HttpServer) {
               type: "transcription",
               payload: message.payload
             });
+            
+            try {
+              // Process transcription with AI to generate notes if available
+              const { text, isFinal } = message.payload;
+              
+              if (isFinal && text && text.trim().length > 0) {
+                // Import the processTranscription function dynamically to avoid circular dependencies
+                const { processTranscription } = await import('./gemini');
+                
+                // Get existing notes for this lecture to provide context
+                const existingNotes = await storage.getLectureNotes(client.lectureId);
+                let previousNoteContent = "";
+                
+                if (existingNotes && existingNotes.length > 0) {
+                  // Use the most recent note as context
+                  previousNoteContent = existingNotes[existingNotes.length - 1].content;
+                }
+                
+                // Process the transcription with AI
+                console.log("Processing transcription with Gemini API...");
+                const noteContent = await processTranscription([text], previousNoteContent);
+                
+                if (noteContent && noteContent !== previousNoteContent) {
+                  // Store the generated note
+                  const note = await storage.addLectureNote({
+                    lectureId: client.lectureId,
+                    content: noteContent
+                  });
+                  
+                  // Broadcast the note to all clients in the lecture
+                  broadcastToLecture(client.lectureId, {
+                    type: "lecture_note",
+                    payload: note
+                  });
+                  
+                  console.log("Generated and saved AI notes for lecture:", client.lectureId);
+                }
+              }
+            } catch (error) {
+              console.error("Error processing transcription for AI notes:", error);
+            }
+            
             break;
           
           case "lecture_note":

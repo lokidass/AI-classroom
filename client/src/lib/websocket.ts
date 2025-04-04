@@ -184,10 +184,10 @@ export class WebSocketClient {
     });
   }
 
-  sendTranscription(text: string) {
+  sendTranscription(text: string, isFinal: boolean = true) {
     this.sendMessage({
       type: "transcription",
-      payload: { text }
+      payload: { text, isFinal }
     });
   }
 

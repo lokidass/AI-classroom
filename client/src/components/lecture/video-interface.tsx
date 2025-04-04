@@ -387,10 +387,8 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
     }
   };
   
-  const startTranscription = () => {
-    // Reset retry counter
-    networkRetryCountRef.current = 0;
-    
+  // Create a separate function to set up the speech recognition instance
+  const setupSpeechRecognition = () => {
     // Check if SpeechRecognition is available
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
@@ -400,16 +398,58 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
         description: "Speech recognition is not supported in your browser.",
         variant: "destructive",
       });
-      return;
+      return false;
     }
     
     try {
+      // Clean up any existing recognition instance
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          // Ignore errors when stopping an existing instance
+        }
+      }
+      
+      // Create a new instance
       recognitionRef.current = new SpeechRecognition();
       const recognition = recognitionRef.current;
       
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
+      
+      recognition.onstart = () => {
+        setIsTranscribing(true);
+        console.log("Speech recognition started successfully");
+      };
+      
+      return true;
+    } catch (error) {
+      console.error("Error setting up speech recognition:", error);
+      toast({
+        title: "Speech Recognition Error",
+        description: "Failed to initialize speech recognition.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+  
+  const startTranscription = () => {
+    // Reset retry counter
+    networkRetryCountRef.current = 0;
+    
+    // Set up a new speech recognition instance
+    if (!setupSpeechRecognition()) {
+      return;
+    }
+    
+    try {
+      const recognition = recognitionRef.current;
+      
+      // Reset transcript when starting new session
+      transcriptRef.current = [];
       
       recognition.onstart = () => {
         setIsTranscribing(true);
@@ -442,34 +482,59 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
         console.error('Speech recognition error', event.error);
         
         if (event.error === 'no-speech') {
-          // This is a common error, just restart
+          // This is a common error, just restart without notification
+          // to avoid overwhelming the user with messages
           recognition.stop();
           setTimeout(() => {
             if (isTranscribing) recognition.start();
           }, 100);
         } else if (event.error === 'network') {
-          // Network errors are common in development environments
-          // Retry with a max number of attempts
+          // Network errors are common in development and browser environments
+          // This happens especially in sandboxed environments like Replit
+          
           networkRetryCountRef.current += 1;
           
-          if (networkRetryCountRef.current < 5) {
+          // Only show toast on first and fifth error to avoid flooding UI
+          if (networkRetryCountRef.current === 1 || networkRetryCountRef.current % 5 === 0) {
             toast({
-              title: "Network Issue",
-              description: `Reconnecting transcription service... (Attempt ${networkRetryCountRef.current}/5)`,
+              title: "Transcription Network Issue",
+              description: "The speech recognition service encountered network issues. Will continue to retry.",
             });
-            
-            recognition.stop();
-            setTimeout(() => {
-              if (isTranscribing) recognition.start();
-            }, 1000);
-          } else {
+          }
+          
+          // Always retry with increasing delay
+          const retryDelay = Math.min(1000 * Math.pow(1.5, Math.min(networkRetryCountRef.current, 5)), 10000);
+          recognition.stop();
+          
+          console.log(`Speech recognition network error #${networkRetryCountRef.current}, retrying in ${retryDelay}ms`);
+          
+          setTimeout(() => {
+            // Only restart if transcription is still enabled
+            if (isTranscribing) {
+              try {
+                recognition.start();
+                console.log("Speech recognition restarted after network error");
+              } catch (e) {
+                console.error("Failed to restart speech recognition:", e);
+                // If cannot restart, create a new recognition instance
+                if (setupSpeechRecognition() && recognitionRef.current) {
+                  try {
+                    recognitionRef.current.start();
+                  } catch (err) {
+                    console.error("Even new speech recognition instance failed to start:", err);
+                  }
+                }
+              }
+            }
+          }, retryDelay);
+          
+          // Add manual transcription option after several network errors
+          if (networkRetryCountRef.current === 10) {
             toast({
-              title: "Transcription Error",
-              description: "Too many network errors, transcription service stopped. Please try again later.",
-              variant: "destructive",
+              title: "Speech Recognition Issues",
+              description: "Automatic transcription is having difficulty. You can still record the lecture and manually transcribe later.",
+              duration: 10000,
             });
-            stopTranscription();
-            networkRetryCountRef.current = 0;
           }
         } else {
           toast({
@@ -485,9 +550,32 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
         // Restart if we're still supposed to be transcribing
         if (isTranscribing) {
           try {
+            console.log("Speech recognition ended, attempting to restart...");
             recognition.start();
           } catch (e) {
-            console.error('Failed to restart recognition', e);
+            console.error('Failed to restart recognition after end event', e);
+            
+            // Try to recreate the recognition instance
+            console.log("Attempting to create a new speech recognition instance...");
+            if (setupSpeechRecognition() && recognitionRef.current) {
+              try {
+                recognitionRef.current.start();
+                console.log("New speech recognition instance started successfully after end event");
+              } catch (err) {
+                console.error("Failed to start new speech recognition instance after end event:", err);
+                
+                // If everything fails, just toggle transcription to give visual feedback
+                if (networkRetryCountRef.current > 20) {
+                  console.log("Too many errors, stopping transcription");
+                  stopTranscription();
+                  toast({
+                    title: "Transcription Stopped",
+                    description: "Speech recognition encountered too many errors and was stopped automatically.",
+                    variant: "destructive",
+                  });
+                }
+              }
+            }
           }
         }
       };

@@ -228,21 +228,27 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
       // Handle close
       peer.on('close', () => {
         console.log(`Connection to peer ${peerId} closed`);
-        if (peers[peerId]) {
-          delete peers[peerId];
-          setPeers({ ...peers });
-          setConnectedPeers(prev => prev.filter(id => id !== peerId));
-        }
+        setPeers(prevPeers => {
+          const newPeers = { ...prevPeers };
+          if (newPeers[peerId]) {
+            delete newPeers[peerId];
+          }
+          return newPeers;
+        });
+        setConnectedPeers(prev => prev.filter(id => id !== peerId));
       });
       
       // Handle error
       peer.on('error', (err) => {
         console.error(`Peer error with ${peerId}:`, err);
-        if (peers[peerId]) {
-          delete peers[peerId];
-          setPeers({ ...peers });
-          setConnectedPeers(prev => prev.filter(id => id !== peerId));
-        }
+        setPeers(prevPeers => {
+          const newPeers = { ...prevPeers };
+          if (newPeers[peerId]) {
+            delete newPeers[peerId];
+          }
+          return newPeers;
+        });
+        setConnectedPeers(prev => prev.filter(id => id !== peerId));
       });
       
       // Add the peer to our list
@@ -280,21 +286,27 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
         // Handle close
         peer.on('close', () => {
           console.log(`Connection to peer ${peerId} closed`);
-          if (peers[peerId]) {
-            delete peers[peerId];
-            setPeers({ ...peers });
-            setConnectedPeers(prev => prev.filter(id => id !== peerId));
-          }
+          setPeers(prevPeers => {
+            const newPeers = { ...prevPeers };
+            if (newPeers[peerId]) {
+              delete newPeers[peerId];
+            }
+            return newPeers;
+          });
+          setConnectedPeers(prev => prev.filter(id => id !== peerId));
         });
         
         // Handle error
         peer.on('error', (err) => {
           console.error(`Peer error with ${peerId}:`, err);
-          if (peers[peerId]) {
-            delete peers[peerId];
-            setPeers({ ...peers });
-            setConnectedPeers(prev => prev.filter(id => id !== peerId));
-          }
+          setPeers(prevPeers => {
+            const newPeers = { ...prevPeers };
+            if (newPeers[peerId]) {
+              delete newPeers[peerId];
+            }
+            return newPeers;
+          });
+          setConnectedPeers(prev => prev.filter(id => id !== peerId));
         });
         
         // Process the signal data
@@ -312,12 +324,15 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
       console.log(`Peer left: ${peerId}`);
       
       // Close and remove the peer connection
-      if (peers[peerId]) {
-        peers[peerId].destroy();
-        delete peers[peerId];
-        setPeers({ ...peers });
-        setConnectedPeers(prev => prev.filter(id => id !== peerId));
-      }
+      setPeers(prevPeers => {
+        const newPeers = { ...prevPeers };
+        if (newPeers[peerId]) {
+          newPeers[peerId].destroy();
+          delete newPeers[peerId];
+        }
+        return newPeers;
+      });
+      setConnectedPeers(prev => prev.filter(id => id !== peerId));
     };
     
     // Get initial list of peers
@@ -342,7 +357,7 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
       // Stop streams and close peer connections
       leaveVideoCall();
     };
-  }, [user, stream, peers]);
+  }, [user, stream]);
   
   // Create ref objects for remote videos when connectedPeers changes
   useEffect(() => {

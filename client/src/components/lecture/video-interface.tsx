@@ -377,6 +377,7 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
   const transcriptRef = useRef<string[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const networkRetryCountRef = useRef<number>(0);
   
   const toggleTranscription = () => {
     if (!isTranscribing) {
@@ -387,6 +388,9 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
   };
   
   const startTranscription = () => {
+    // Reset retry counter
+    networkRetryCountRef.current = 0;
+    
     // Check if SpeechRecognition is available
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
@@ -436,6 +440,30 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
           setTimeout(() => {
             if (isTranscribing) recognition.start();
           }, 100);
+        } else if (event.error === 'network') {
+          // Network errors are common in development environments
+          // Retry with a max number of attempts
+          networkRetryCountRef.current += 1;
+          
+          if (networkRetryCountRef.current < 5) {
+            toast({
+              title: "Network Issue",
+              description: `Reconnecting transcription service... (Attempt ${networkRetryCountRef.current}/5)`,
+            });
+            
+            recognition.stop();
+            setTimeout(() => {
+              if (isTranscribing) recognition.start();
+            }, 1000);
+          } else {
+            toast({
+              title: "Transcription Error",
+              description: "Too many network errors, transcription service stopped. Please try again later.",
+              variant: "destructive",
+            });
+            stopTranscription();
+            networkRetryCountRef.current = 0;
+          }
         } else {
           toast({
             title: "Transcription Error",
@@ -527,12 +555,28 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
         });
         
         // Create a download link for the recording (optional)
-        const url = URL.createObjectURL(recordedBlob);
-        const a = document.createElement('a');
-        document.body.appendChild(a);
-        a.style.display = 'none';
-        a.href = url;
-        a.download = `lecture-recording-${Date.now()}.webm`;
+        try {
+          const url = URL.createObjectURL(recordedBlob);
+          const a = document.createElement('a');
+          document.body.appendChild(a);
+          a.style.display = 'none';
+          a.href = url;
+          a.download = `lecture-recording-${Date.now()}.webm`;
+          a.click();
+          
+          // Clean up
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 100);
+        } catch (error) {
+          console.error('Error creating download link:', error);
+          toast({
+            title: "Download Error",
+            description: "Could not create download link for recording. The recording has been saved to the server.",
+            variant: "destructive",
+          });
+        }
         
         // Notify WebSocket that recording has stopped
         webSocketClient.stopRecording();

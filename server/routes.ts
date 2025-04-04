@@ -4,7 +4,11 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { z } from "zod";
-import { insertClassroomSchema, insertLectureSchema, insertAssignmentSchema, insertMaterialSchema, insertMessageSchema, insertLectureNoteSchema, insertClassroomMemberSchema } from "@shared/schema";
+import { 
+  insertClassroomSchema, insertLectureSchema, insertAssignmentSchema, 
+  insertMaterialSchema, insertMessageSchema, insertLectureNoteSchema, 
+  insertClassroomMemberSchema, insertLectureRecordingSchema 
+} from "@shared/schema";
 import { setupWebSockets } from "./websocket";
 import { nanoid } from "nanoid";
 
@@ -380,6 +384,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       res.json(messagesWithUsers);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Lecture Recording routes
+  app.post("/api/lectures/:lectureId/recordings", isTeacher, async (req, res, next) => {
+    try {
+      const lectureId = parseInt(req.params.lectureId);
+      if (isNaN(lectureId)) {
+        return res.status(400).json({ message: "Invalid lecture ID" });
+      }
+      
+      const lecture = await storage.getLecture(lectureId);
+      if (!lecture) {
+        return res.status(404).json({ message: "Lecture not found" });
+      }
+      
+      // Check if user is the creator of the lecture
+      if (lecture.createdBy !== req.user.id) {
+        return res.status(403).json({ message: "Forbidden - Not the creator of this lecture" });
+      }
+      
+      const data = insertLectureRecordingSchema.parse({
+        ...req.body,
+        lectureId,
+        createdBy: req.user.id
+      });
+      
+      const recording = await storage.createLectureRecording(data);
+      res.status(201).json(recording);
+    } catch (err) {
+      next(err);
+    }
+  });
+  
+  app.get("/api/lectures/:lectureId/recordings", isAuthenticated, async (req, res, next) => {
+    try {
+      const lectureId = parseInt(req.params.lectureId);
+      if (isNaN(lectureId)) {
+        return res.status(400).json({ message: "Invalid lecture ID" });
+      }
+      
+      const lecture = await storage.getLecture(lectureId);
+      if (!lecture) {
+        return res.status(404).json({ message: "Lecture not found" });
+      }
+      
+      const recordings = await storage.getLectureRecordings(lectureId);
+      res.json(recordings);
+    } catch (err) {
+      next(err);
+    }
+  });
+  
+  app.get("/api/recordings/:id", isAuthenticated, async (req, res, next) => {
+    try {
+      const recordingId = parseInt(req.params.id);
+      if (isNaN(recordingId)) {
+        return res.status(400).json({ message: "Invalid recording ID" });
+      }
+      
+      const recording = await storage.getLectureRecording(recordingId);
+      if (!recording) {
+        return res.status(404).json({ message: "Recording not found" });
+      }
+      
+      // Get the lecture to check permissions
+      const lecture = await storage.getLecture(recording.lectureId);
+      if (!lecture) {
+        return res.status(404).json({ message: "Associated lecture not found" });
+      }
+      
+      // Check if user is a member of the classroom
+      const isUserInClassroom = await storage.isUserInClassroom(req.user.id, lecture.classroomId);
+      if (!isUserInClassroom) {
+        return res.status(403).json({ message: "Forbidden - Not a member of this classroom" });
+      }
+      
+      res.json(recording);
     } catch (err) {
       next(err);
     }

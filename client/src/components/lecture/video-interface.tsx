@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { 
   Mic, MicOff, Video as VideoIcon, VideoOff, 
-  PhoneOff, Share, Users, MessageSquare, Volume2, VolumeX
+  PhoneOff, Share, Users, MessageSquare, Volume2, VolumeX,
+  Circle, Square, FileVideo
 } from "lucide-react";
 import { webSocketClient } from "@/lib/websocket";
 import { useToast } from "@/hooks/use-toast";
@@ -355,8 +356,11 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
   
   // Speech recognition for transcript generation
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
   
   const toggleTranscription = () => {
     if (!isTranscribing) {
@@ -467,13 +471,111 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
     });
   };
   
+  // Recording functionality
+  const startRecording = () => {
+    if (!stream) {
+      toast({
+        title: "Recording Error",
+        description: "Cannot start recording without active media stream",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Initialize the MediaRecorder with the stream
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'video/webm;codecs=vp9,opus'
+      });
+      
+      mediaRecorderRef.current = mediaRecorder;
+      recordedChunksRef.current = [];
+      
+      // Handle dataavailable event to collect recorded chunks
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+          
+          // Send the data chunk to the server via WebSocket
+          // This is optional - for very large recordings, it might be better to
+          // just save at the end rather than streaming chunks
+          webSocketClient.sendRecordingData(event.data);
+        }
+      };
+      
+      // Handle recording stop
+      mediaRecorder.onstop = () => {
+        // Create a single Blob from all the chunks
+        const recordedBlob = new Blob(recordedChunksRef.current, {
+          type: 'video/webm'
+        });
+        
+        // Create a download link for the recording (optional)
+        const url = URL.createObjectURL(recordedBlob);
+        const a = document.createElement('a');
+        document.body.appendChild(a);
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `lecture-recording-${Date.now()}.webm`;
+        
+        // Notify WebSocket that recording has stopped
+        webSocketClient.stopRecording();
+        
+        setIsRecording(false);
+        
+        toast({
+          title: "Recording Saved",
+          description: "Your lecture recording has been saved.",
+        });
+      };
+      
+      // Start recording
+      mediaRecorder.start(1000); // Collect data in 1-second chunks
+      
+      // Notify WebSocket that recording has started
+      webSocketClient.startRecording();
+      
+      setIsRecording(true);
+      
+      toast({
+        title: "Recording Started",
+        description: "Your lecture is now being recorded.",
+      });
+      
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      toast({
+        title: "Recording Error",
+        description: "Failed to start recording.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+    }
+  };
+  
+  const toggleRecording = () => {
+    if (!isRecording) {
+      startRecording();
+    } else {
+      stopRecording();
+    }
+  };
+
   // Clean up on unmount
   useEffect(() => {
     return () => {
       leaveVideoCall();
       stopTranscription();
+      if (isRecording) {
+        stopRecording();
+      }
     };
-  }, []);
+  }, [isRecording]);
 
   return (
     <div className="flex flex-col">
@@ -540,15 +642,42 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
         </Button>
         
         {isTeacher && (
-          <Button
-            variant={isTranscribing ? "default" : "outline"}
-            size="icon"
-            onClick={toggleTranscription}
-            className="rounded-full w-10 h-10"
-            title="Toggle Transcription"
-          >
-            {isTranscribing ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
-          </Button>
+          <>
+            <Button
+              variant={isTranscribing ? "default" : "outline"}
+              size="icon"
+              onClick={toggleTranscription}
+              className="rounded-full w-10 h-10"
+              title="Toggle Transcription"
+            >
+              {isTranscribing ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+            </Button>
+            
+            <Button
+              variant={isRecording ? "default" : "outline"}
+              size="icon"
+              onClick={toggleRecording}
+              className={`rounded-full w-10 h-10 ${isRecording ? "bg-red-500 text-white hover:bg-red-600" : ""}`}
+              title={isRecording ? "Stop Recording" : "Start Recording"}
+            >
+              {isRecording ? <Square className="h-5 w-5" /> : <Circle className="h-5 w-5 fill-current" />}
+            </Button>
+            
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-full w-10 h-10"
+              title="View Recordings"
+              onClick={() => {
+                toast({
+                  title: "Recordings",
+                  description: "View your lecture recordings in the classroom materials section.",
+                });
+              }}
+            >
+              <FileVideo className="h-5 w-5" />
+            </Button>
+          </>
         )}
         
         <Button

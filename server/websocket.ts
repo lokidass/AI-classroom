@@ -222,6 +222,80 @@ export function setupWebSockets(httpServer: HttpServer) {
             });
             break;
             
+          case "start_recording":
+            if (!client.userId || !client.lectureId) {
+              ws.send(JSON.stringify({
+                type: "error",
+                payload: { message: "Not authenticated or not in a lecture" }
+              }));
+              break;
+            }
+            
+            // Check if the user is the teacher/creator of the lecture
+            const lecture = await storage.getLecture(client.lectureId);
+            if (!lecture || lecture.createdBy !== client.userId) {
+              ws.send(JSON.stringify({
+                type: "error",
+                payload: { message: "Only the lecture creator can start recording" }
+              }));
+              break;
+            }
+            
+            // Notify all clients in the lecture that recording has started
+            broadcastToLecture(client.lectureId, {
+              type: "recording_started",
+              payload: { 
+                lectureId: client.lectureId,
+                startedBy: client.userId,
+                timestamp: Date.now()
+              }
+            });
+            break;
+            
+          case "stop_recording":
+            if (!client.userId || !client.lectureId) {
+              ws.send(JSON.stringify({
+                type: "error",
+                payload: { message: "Not authenticated or not in a lecture" }
+              }));
+              break;
+            }
+            
+            // Check if the user is the teacher/creator of the lecture
+            const lectureToStopRecording = await storage.getLecture(client.lectureId);
+            if (!lectureToStopRecording || lectureToStopRecording.createdBy !== client.userId) {
+              ws.send(JSON.stringify({
+                type: "error",
+                payload: { message: "Only the lecture creator can stop recording" }
+              }));
+              break;
+            }
+            
+            // Notify all clients in the lecture that recording has stopped
+            broadcastToLecture(client.lectureId, {
+              type: "recording_stopped",
+              payload: { 
+                lectureId: client.lectureId,
+                stoppedBy: client.userId,
+                timestamp: Date.now()
+              }
+            });
+            break;
+            
+          case "recording_data":
+            if (!client.userId || !client.lectureId) {
+              ws.send(JSON.stringify({
+                type: "error",
+                payload: { message: "Not authenticated or not in a lecture" }
+              }));
+              break;
+            }
+            
+            // Handle recording data chunks
+            // This data would typically be processed and saved for later assembly into a complete recording
+            console.log("Received recording data chunk");
+            break;
+            
           case "ping":
             // Respond to ping with pong
             ws.send(JSON.stringify({

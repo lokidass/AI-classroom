@@ -174,6 +174,31 @@ export type InsertAssignment = z.infer<typeof insertAssignmentSchema>;
 export type Material = typeof materials.$inferSelect;
 export type InsertMaterial = z.infer<typeof insertMaterialSchema>;
 
+// Lecture recording schema
+export const lectureRecordings = pgTable("lecture_recordings", {
+  id: serial("id").primaryKey(),
+  lectureId: integer("lecture_id").notNull(),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  duration: integer("duration"), // in seconds
+  size: integer("size"), // in bytes
+  createdBy: integer("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertLectureRecordingSchema = createInsertSchema(lectureRecordings).pick({
+  lectureId: true,
+  fileName: true,
+  fileUrl: true,
+  duration: true,
+  size: true,
+  createdBy: true,
+});
+
 // Define Message types
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+
+// Define LectureRecording types
+export type LectureRecording = typeof lectureRecordings.$inferSelect;
+export type InsertLectureRecording = z.infer<typeof insertLectureRecordingSchema>;

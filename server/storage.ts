@@ -6,7 +6,8 @@ import {
   lectureNotes, type LectureNote, type InsertLectureNote,
   assignments, type Assignment, type InsertAssignment,
   materials, type Material, type InsertMaterial,
-  messages, type Message, type InsertMessage
+  messages, type Message, type InsertMessage,
+  lectureRecordings, type LectureRecording, type InsertLectureRecording
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -59,6 +60,11 @@ export interface IStorage {
   createMessage(message: InsertMessage): Promise<Message>;
   getMessagesByLecture(lectureId: number): Promise<Message[]>;
   
+  // Lecture recording operations
+  createLectureRecording(recording: InsertLectureRecording): Promise<LectureRecording>;
+  getLectureRecordings(lectureId: number): Promise<LectureRecording[]>;
+  getLectureRecording(id: number): Promise<LectureRecording | undefined>;
+  
   // Session store
   sessionStore: session.SessionStore;
 }
@@ -72,6 +78,7 @@ export class MemStorage implements IStorage {
   private assignments: Map<number, Assignment>;
   private materials: Map<number, Material>;
   private messages: Map<number, Message>;
+  private lectureRecordings: Map<number, LectureRecording>;
   
   public sessionStore: session.SessionStore;
   
@@ -84,6 +91,7 @@ export class MemStorage implements IStorage {
   private assignmentIdCounter: number;
   private materialIdCounter: number;
   private messageIdCounter: number;
+  private lectureRecordingIdCounter: number;
 
   constructor() {
     this.users = new Map();
@@ -94,6 +102,7 @@ export class MemStorage implements IStorage {
     this.assignments = new Map();
     this.materials = new Map();
     this.messages = new Map();
+    this.lectureRecordings = new Map();
     
     this.userIdCounter = 1;
     this.classroomIdCounter = 1;
@@ -103,6 +112,7 @@ export class MemStorage implements IStorage {
     this.assignmentIdCounter = 1;
     this.materialIdCounter = 1;
     this.messageIdCounter = 1;
+    this.lectureRecordingIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // prune expired entries every 24h
@@ -357,6 +367,29 @@ export class MemStorage implements IStorage {
     return Array.from(this.messages.values())
       .filter(message => message.lectureId === lectureId)
       .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  }
+
+  // Lecture recording operations
+  async createLectureRecording(insertRecording: InsertLectureRecording): Promise<LectureRecording> {
+    const id = this.lectureRecordingIdCounter++;
+    const now = new Date();
+    const recording: LectureRecording = {
+      ...insertRecording,
+      id,
+      createdAt: now
+    };
+    this.lectureRecordings.set(id, recording);
+    return recording;
+  }
+
+  async getLectureRecording(id: number): Promise<LectureRecording | undefined> {
+    return this.lectureRecordings.get(id);
+  }
+
+  async getLectureRecordings(lectureId: number): Promise<LectureRecording[]> {
+    return Array.from(this.lectureRecordings.values())
+      .filter(recording => recording.lectureId === lectureId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // newest first
   }
 }
 

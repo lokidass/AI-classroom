@@ -167,6 +167,27 @@ export class WebSocketClient {
     });
   }
 
+  startRecording() {
+    this.sendMessage({
+      type: "start_recording",
+      payload: { timestamp: Date.now() }
+    });
+  }
+
+  stopRecording() {
+    this.sendMessage({
+      type: "stop_recording",
+      payload: { timestamp: Date.now() }
+    });
+  }
+
+  sendRecordingData(data: any) {
+    this.sendMessage({
+      type: "recording_data",
+      payload: { data, timestamp: Date.now() }
+    });
+  }
+
   on(event: string, callback: (data: any) => void) {
     if (!this.eventListeners.has(event)) {
       this.eventListeners.set(event, []);

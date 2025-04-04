@@ -22,6 +22,8 @@ export default function WebSocketTestPage() {
   const [directTestPrompt, setDirectTestPrompt] = useState("Summarize the following in bullet points: The sky is blue because of the way atmosphere scatters light.");
   const [selectedModel, setSelectedModel] = useState("gemini-1.0-pro");
   const [isTestingApi, setIsTestingApi] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
 
   useEffect(() => {
     // Listen for connection events
@@ -168,6 +170,45 @@ export default function WebSocketTestPage() {
       title: "Test Transcription Sent",
       description: "A test transcription has been sent to generate notes.",
     });
+  };
+  
+  // Handler to list available models
+  const handleListModels = async () => {
+    try {
+      setIsLoadingModels(true);
+      addMessage("Fetching available Gemini models...");
+      
+      const response = await apiRequest("GET", "/api/test/gemini/models");
+      const result = await response.json();
+      
+      if (result.success && result.models) {
+        // Extract model names and display them
+        const modelNames = result.models.map((model: any) => model.name);
+        setAvailableModels(modelNames);
+        addMessage(`Available models: ${modelNames.join(", ")}`);
+        
+        toast({
+          title: "Models Fetched",
+          description: `Found ${modelNames.length} available models`,
+        });
+      } else {
+        addMessage(`Error fetching models: ${result.error || 'Unknown error'}`);
+        toast({
+          title: "Error Fetching Models",
+          description: result.error || "Failed to fetch available models",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      addMessage(`Error fetching models: ${error instanceof Error ? error.message : String(error)}`);
+      toast({
+        title: "Error Fetching Models",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingModels(false);
+    }
   };
   
   // Handler for direct Gemini API testing
@@ -385,14 +426,32 @@ export default function WebSocketTestPage() {
           <CardContent>
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium">Test Model:</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-medium">Test Model:</label>
+                  <Button 
+                    onClick={handleListModels}
+                    disabled={isLoadingModels}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {isLoadingModels ? "Loading..." : "List Available Models"}
+                  </Button>
+                </div>
                 <Select value={selectedModel} onValueChange={setSelectedModel}>
                   <SelectTrigger>
                     <SelectValue>{selectedModel}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="gemini-1.0-pro">gemini-1.0-pro</SelectItem>
-                    <SelectItem value="gemini-pro">gemini-pro</SelectItem>
+                    {availableModels.length > 0 ? (
+                      availableModels.map((model) => (
+                        <SelectItem key={model} value={model}>{model}</SelectItem>
+                      ))
+                    ) : (
+                      <>
+                        <SelectItem value="gemini-1.0-pro">gemini-1.0-pro</SelectItem>
+                        <SelectItem value="gemini-pro">gemini-pro</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

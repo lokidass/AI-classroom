@@ -126,6 +126,45 @@ export async function answerQuestion(question: string, lectureContext?: string) 
 }
 
 // Function to process transcription segments and extract meaningful content
+// Function to list available models
+export async function listAvailableModels() {
+  if (!API_KEY) {
+    console.error("No Gemini API key provided. Please set the GEMINI_API_KEY environment variable.");
+    return "Error: No Gemini API key provided. Please set the GEMINI_API_KEY environment variable.";
+  }
+
+  try {
+    console.log("Fetching available models...");
+    
+    // Since listModels() isn't directly available, we'll make a raw fetch request
+    const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models";
+    const response = await fetch(`${apiUrl}?key=${API_KEY}`);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch models: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log("Successfully fetched models");
+    
+    return {
+      success: true,
+      models: data.models
+    };
+  } catch (error) {
+    console.error("Error listing models:", error);
+    const errorMessage = error instanceof Error 
+      ? `Error: ${error.name}: ${error.message}` 
+      : "Unknown error occurred";
+    console.error("Detailed error:", errorMessage);
+    
+    return {
+      success: false,
+      error: errorMessage
+    };
+  }
+}
+
 // Test function to diagnose API issues with different model configurations
 export async function testGeminiApi(prompt: string, modelName?: string) {
   if (!API_KEY) {

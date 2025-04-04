@@ -10,7 +10,7 @@ import {
   insertClassroomMemberSchema, insertLectureRecordingSchema 
 } from "@shared/schema";
 import { setupWebSockets } from "./websocket";
-import { testGeminiApi } from "./gemini";
+import { testGeminiApi, listAvailableModels } from "./gemini";
 import { nanoid } from "nanoid";
 
 function isAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
@@ -509,11 +509,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Use the already imported testGeminiApi function
-      
       const result = await testGeminiApi(prompt, model);
       res.json(result);
     } catch (error) {
       console.error("Error in Gemini API test endpoint:", error);
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: process.env.NODE_ENV !== "production" ? error instanceof Error ? error.stack : undefined : undefined
+      });
+    }
+  });
+  
+  // List available Gemini models endpoint
+  app.get("/api/test/gemini/models", async (req, res, next) => {
+    try {
+      const result = await listAvailableModels();
+      res.json(result);
+    } catch (error) {
+      console.error("Error listing Gemini models:", error);
       res.status(500).json({ 
         error: error instanceof Error ? error.message : "Unknown error",
         stack: process.env.NODE_ENV !== "production" ? error instanceof Error ? error.stack : undefined : undefined

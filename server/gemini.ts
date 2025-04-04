@@ -2,6 +2,15 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Initialize the Generative AI API with the API key
 const API_KEY = process.env.GEMINI_API_KEY || "";
+if (!API_KEY) {
+  console.error("=== GEMINI API KEY MISSING ===");
+  console.error("Please set the GEMINI_API_KEY environment variable");
+  console.error("This is required for note generation functionality");
+  console.error("=====================================");
+} else {
+  console.log("Gemini API key is available");
+}
+
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 // Function to generate notes from transcription

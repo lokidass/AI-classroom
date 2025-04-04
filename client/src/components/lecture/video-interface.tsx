@@ -421,13 +421,20 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
           .map((result: any) => result[0].transcript)
           .join(' ');
         
-        // Only send stable (final) results to avoid too many updates
-        if (event.results[event.results.length - 1].isFinal) {
-          const lastResult = event.results[event.results.length - 1][0].transcript;
-          transcriptRef.current.push(lastResult);
-          
-          // Send transcription via WebSocket
-          webSocketClient.sendTranscription(lastResult, true);
+        console.log("Speech recognition result:", transcript);
+        
+        // Send interim results too, but mark them as not final
+        const currentResult = event.results[event.results.length - 1];
+        const currentTranscript = currentResult[0].transcript;
+        const isFinal = currentResult.isFinal;
+        
+        console.log(`Sending transcription: "${currentTranscript}", isFinal: ${isFinal}`);
+        webSocketClient.sendTranscription(currentTranscript, isFinal);
+        
+        // For final results, store them in our transcript history
+        if (isFinal) {
+          transcriptRef.current.push(currentTranscript);
+          console.log("Final transcript segment added:", currentTranscript);
         }
       };
       
@@ -626,6 +633,77 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
     }
   };
 
+  // Function to test manual note generation
+  const testNoteGeneration = async () => {
+    const testText = "This is a test of the note generation system. The human brain processes visual information faster than text. Colors can influence emotions and decision-making. Learning styles vary among individuals. Memory retention improves with repeated exposure to information over time.";
+    
+    console.log("Sending test transcription:", testText);
+    webSocketClient.sendTranscription(testText, true);
+    
+    toast({
+      title: "Test Transcription Sent",
+      description: "A test transcription has been sent to generate notes.",
+    });
+    
+    // Set up a listener for note generation errors
+    webSocketClient.once("note_generation_error", (data) => {
+      console.error("Note generation error:", data);
+      toast({
+        title: "Note Generation Error",
+        description: data.details || data.message,
+        variant: "destructive",
+      });
+    });
+    
+    // Set up a listener for successfully generated notes
+    webSocketClient.once("lecture_note", (data) => {
+      console.log("Lecture note received:", data);
+      toast({
+        title: "Note Generated",
+        description: "AI successfully generated a note from your test transcription.",
+      });
+    });
+  };
+
+  // Initialize WebSocket connection and add websocket event listeners
+  useEffect(() => {
+    if (user) {
+      console.log("Connecting to WebSocket server...");
+      webSocketClient.connect();
+      webSocketClient.authenticate(user.id);
+      
+      if (lectureId) {
+        console.log(`Joining lecture ${lectureId}...`);
+        webSocketClient.joinLecture(lectureId);
+      }
+      
+      // Set up global WebSocket event listeners
+      webSocketClient.on("error", (data) => {
+        console.error("WebSocket error:", data);
+        toast({
+          title: "WebSocket Error",
+          description: data.message || "An error occurred with the WebSocket connection.",
+          variant: "destructive",
+        });
+      });
+      
+      webSocketClient.on("note_generation_error", (data) => {
+        console.error("Note generation error:", data);
+        toast({
+          title: "Note Generation Error",
+          description: data.details || data.message,
+          variant: "destructive",
+        });
+      });
+    }
+    
+    return () => {
+      // Clean up event listeners
+      webSocketClient.off("error", () => {});
+      webSocketClient.off("note_generation_error", () => {});
+    };
+  }, [user, lectureId]);
+
   // Clean up on unmount
   useEffect(() => {
     return () => {
@@ -770,6 +848,17 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
           <MessageSquare className="h-5 w-5" />
         </Button>
         
+        {isTeacher && (
+          <Button
+            variant="outline"
+            onClick={testNoteGeneration}
+            className="rounded-full"
+            title="Test Note Generation"
+          >
+            Test Notes
+          </Button>
+        )}
+
         <Button
           variant="destructive"
           size="icon"

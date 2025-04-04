@@ -283,7 +283,17 @@ export function setupWebSockets(httpServer: HttpServer) {
               // Process transcription with AI to generate notes if available
               const { text, isFinal } = message.payload;
               
+              console.log(`Received transcription: "${text}", isFinal: ${isFinal}`);
+              
+              // Check if we should process this transcription
               if (isFinal && text && text.trim().length > 0) {
+                console.log("Transcription is final and has content, processing...");
+                
+                if (!process.env.GEMINI_API_KEY) {
+                  console.error("GEMINI_API_KEY environment variable is missing!");
+                  throw new Error("Gemini API key is missing. Please set the GEMINI_API_KEY environment variable.");
+                }
+                
                 // Import the processTranscription function dynamically to avoid circular dependencies
                 const { processTranscription } = await import('./gemini');
                 
@@ -300,23 +310,39 @@ export function setupWebSockets(httpServer: HttpServer) {
                 console.log("Processing transcription with Gemini API...");
                 console.log("Text to process:", text);
                 console.log("Using previous note content:", previousNoteContent ? "Yes (length: " + previousNoteContent.length + ")" : "No");
-                const noteContent = await processTranscription([text], previousNoteContent);
                 
-                if (noteContent && noteContent !== previousNoteContent) {
-                  // Store the generated note
-                  const note = await storage.addLectureNote({
-                    lectureId: client.lectureId,
-                    content: noteContent
-                  });
+                try {
+                  const noteContent = await processTranscription([text], previousNoteContent);
+                  console.log("Generated note content:", noteContent ? noteContent.substring(0, 50) + "..." : "No content generated");
                   
-                  // Broadcast the note to all clients in the lecture
-                  broadcastToLecture(client.lectureId, {
-                    type: "lecture_note",
-                    payload: note
-                  });
-                  
-                  console.log("Generated and saved AI notes for lecture:", client.lectureId);
+                  if (noteContent && noteContent !== previousNoteContent && !noteContent.startsWith("Error:")) {
+                    // Store the generated note
+                    console.log("Saving generated note to database...");
+                    const note = await storage.addLectureNote({
+                      lectureId: client.lectureId,
+                      content: noteContent
+                    });
+                    
+                    // Broadcast the note to all clients in the lecture
+                    console.log("Broadcasting note to all clients...");
+                    broadcastToLecture(client.lectureId, {
+                      type: "lecture_note",
+                      payload: note
+                    });
+                    
+                    console.log("Successfully generated and saved AI notes for lecture:", client.lectureId);
+                  } else if (noteContent && noteContent.startsWith("Error:")) {
+                    console.error("Gemini API returned an error:", noteContent);
+                    throw new Error(noteContent);
+                  } else {
+                    console.log("No new note content generated or content matched previous notes");
+                  }
+                } catch (apiError) {
+                  console.error("Error while calling Gemini API:", apiError);
+                  throw apiError; // Re-throw to be caught by the outer catch block
                 }
+              } else {
+                console.log("Skipping transcription processing - not final or no content");
               }
             } catch (error) {
               console.error("Error processing transcription for AI notes:", error);
@@ -331,7 +357,10 @@ export function setupWebSockets(httpServer: HttpServer) {
               if (client.ws.readyState === WebSocket.OPEN) {
                 client.ws.send(JSON.stringify({
                   type: "note_generation_error",
-                  payload: { message: "Error generating notes. Please try again later." }
+                  payload: { 
+                    message: "Error generating notes. Please try again later.",
+                    details: errorMessage
+                  }
                 }));
               }
             }

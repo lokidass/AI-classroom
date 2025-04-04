@@ -6,12 +6,12 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
  * With this version, we need to use the correct model name format
  * compatible with the v1beta API.
  * 
- * Following errors we've seen in testing:
- * - "models/gemini-pro is not found for API version v1beta, or is not supported for generateContent"
- * - "models/gemini-1.0-pro is not found for API version v1beta, or is not supported for generateContent"
+ * Important: Model names must include the 'models/' prefix. For example:
+ * - "models/gemini-1.5-pro-latest" (recommended)
+ * - "models/gemini-1.5-flash-latest" (faster, less powerful)
  * 
- * According to our testing, for the v1beta API we need to use just "gemini-pro".
- * Let's update all our model references to use this format.
+ * The old model names like "gemini-pro" or "gemini-1.0-pro" without the 'models/' prefix
+ * will result in 404 errors.
  */
 
 // Initialize the Generative AI API with the API key
@@ -27,8 +27,8 @@ if (!API_KEY) {
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// The correct model name to use with the v1beta API version
-const MODEL_NAME = "gemini-pro";
+// The correct model name to use with the v1beta API version - must include 'models/' prefix
+const MODEL_NAME = "models/gemini-1.5-pro-latest";
 
 // Function to generate notes from transcription
 export async function generateNotesFromTranscription(transcription: string) {

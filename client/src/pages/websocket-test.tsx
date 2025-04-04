@@ -20,7 +20,7 @@ export default function WebSocketTestPage() {
   
   // Direct Gemini API testing state
   const [directTestPrompt, setDirectTestPrompt] = useState("Summarize the following in bullet points: The sky is blue because of the way atmosphere scatters light.");
-  const [selectedModel, setSelectedModel] = useState("gemini-1.0-pro");
+  const [selectedModel, setSelectedModel] = useState("models/gemini-1.5-pro-latest");
   const [isTestingApi, setIsTestingApi] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
@@ -448,8 +448,8 @@ export default function WebSocketTestPage() {
                       ))
                     ) : (
                       <>
-                        <SelectItem value="gemini-1.0-pro">gemini-1.0-pro</SelectItem>
-                        <SelectItem value="gemini-pro">gemini-pro</SelectItem>
+                        <SelectItem value="models/gemini-1.5-pro-latest">models/gemini-1.5-pro-latest</SelectItem>
+                        <SelectItem value="models/gemini-1.5-flash-latest">models/gemini-1.5-flash-latest</SelectItem>
                       </>
                     )}
                   </SelectContent>

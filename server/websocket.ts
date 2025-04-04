@@ -298,6 +298,8 @@ export function setupWebSockets(httpServer: HttpServer) {
                 
                 // Process the transcription with AI
                 console.log("Processing transcription with Gemini API...");
+                console.log("Text to process:", text);
+                console.log("Using previous note content:", previousNoteContent ? "Yes (length: " + previousNoteContent.length + ")" : "No");
                 const noteContent = await processTranscription([text], previousNoteContent);
                 
                 if (noteContent && noteContent !== previousNoteContent) {
@@ -318,6 +320,20 @@ export function setupWebSockets(httpServer: HttpServer) {
               }
             } catch (error) {
               console.error("Error processing transcription for AI notes:", error);
+              
+              // More detailed error information for debugging
+              const errorMessage = error instanceof Error 
+                ? `Error: ${error.name}: ${error.message}` 
+                : "Unknown error occurred";
+              console.error("Detailed error:", errorMessage);
+              
+              // Notify clients about the error
+              if (client.ws.readyState === WebSocket.OPEN) {
+                client.ws.send(JSON.stringify({
+                  type: "note_generation_error",
+                  payload: { message: "Error generating notes. Please try again later." }
+                }));
+              }
             }
             
             break;

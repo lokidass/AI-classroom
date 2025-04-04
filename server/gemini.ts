@@ -38,6 +38,12 @@ export async function generateNotesFromTranscription(transcription: string) {
     return response.text();
   } catch (error) {
     console.error("Error generating notes with Gemini API:", error);
+    // More detailed error information for debugging
+    const errorMessage = error instanceof Error 
+      ? `Error: ${error.name}: ${error.message}` 
+      : "Unknown error occurred";
+    console.error("Detailed error:", errorMessage);
+    
     return "Error generating notes. Please try again later.";
   }
 }
@@ -83,6 +89,12 @@ export async function answerQuestion(question: string, lectureContext?: string) 
     return response.text();
   } catch (error) {
     console.error("Error answering question with Gemini API:", error);
+    // More detailed error information for debugging
+    const errorMessage = error instanceof Error 
+      ? `Error: ${error.name}: ${error.message}` 
+      : "Unknown error occurred";
+    console.error("Detailed error:", errorMessage);
+    
     return "I'm sorry, I'm having trouble processing your question right now. Please try again later.";
   }
 }
@@ -138,6 +150,13 @@ export async function processTranscription(transcriptionSegments: string[], prev
     return response.text();
   } catch (error) {
     console.error("Error processing transcription with Gemini API:", error);
+    // More detailed error information for debugging
+    const errorMessage = error instanceof Error 
+      ? `Error: ${error.name}: ${error.message}` 
+      : "Unknown error occurred";
+    console.error("Detailed error:", errorMessage);
+    
+    // Return the previous notes if they exist, otherwise return an error message
     return previousNotes || "Error generating notes. Please try again later.";
   }
 }

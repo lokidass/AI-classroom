@@ -235,36 +235,57 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
       
       let newStream;
       
-      // First try video and audio together
+      // First try high-quality video and audio with specific settings
       try {
-        console.log("Attempting to get user media with video and audio...");
+        console.log("Attempting to get user media with optimized settings...");
         newStream = await navigator.mediaDevices.getUserMedia({
           video: { 
-            width: { ideal: 640 },
-            height: { ideal: 480 } 
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
+            frameRate: { ideal: 30, min: 15 },
+            facingMode: 'user'
           },
-          audio: true
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
         });
-        console.log("Successfully got both video and audio.");
+        console.log("Successfully got high-quality video and audio.");
       } catch (err) {
-        console.warn("Could not get both video and audio:", err);
+        console.warn("Could not get high-quality media:", err);
         
-        // Try with just video
+        // Fall back to basic video and audio
         try {
-          console.log("Attempting to get just video...");
+          console.log("Falling back to basic video and audio...");
           newStream = await navigator.mediaDevices.getUserMedia({
-            video: true
-          });
-          console.log("Successfully got just video.");
-        } catch (videoErr) {
-          console.warn("Could not get video:", videoErr);
-          
-          // Try with just audio
-          console.log("Attempting to get just audio...");
-          newStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
             audio: true
           });
-          console.log("Successfully got just audio.");
+          console.log("Successfully got basic video and audio.");
+        } catch (basicErr) {
+          console.warn("Could not get basic video and audio:", basicErr);
+          
+          // Try with just video
+          try {
+            console.log("Attempting to get just video...");
+            newStream = await navigator.mediaDevices.getUserMedia({
+              video: true
+            });
+            console.log("Successfully got just video.");
+          } catch (videoErr) {
+            console.warn("Could not get video:", videoErr);
+            
+            // Final fallback to just audio
+            console.log("Final fallback - attempting to get just audio...");
+            newStream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true
+              }
+            });
+            console.log("Successfully got just audio.");
+          }
         }
       }
       
@@ -380,19 +401,65 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
       // If we already have a connection to this peer, don't create another one
       if (peers[peerId]) return;
       
+      console.log(`Creating new initiator peer connection to ${peerId}`);
+      
+      // Enhanced WebRTC options for more robust connections
+      const rtcConfig: RTCConfiguration = {
+        iceServers: [
+          // Standard Google STUN servers
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+          { urls: "stun:stun3.l.google.com:19302" },
+          { urls: "stun:stun4.l.google.com:19302" },
+          // Public STUN servers for better NAT traversal
+          { urls: "stun:stun.stunprotocol.org:3478" },
+          { urls: "stun:stun.voiparound.com" },
+          { urls: "stun:stun.voipbuster.com" },
+          { urls: "stun:stun.voipstunt.com" },
+          { urls: "stun:stun.voxgratia.org" }
+        ],
+        iceTransportPolicy: "all" as RTCIceTransportPolicy,
+        iceCandidatePoolSize: 10,
+      };
+      
       // Create a new peer connection (initiator)
       const peer = new Peer({
         initiator: true,
         trickle: true, // Enable trickle ICE for better connection establishment
         stream: stream || undefined,
-        config: {
-          iceServers: [
-            { urls: "stun:stun.l.google.com:19302" },
-            { urls: "stun:stun1.l.google.com:19302" },
-            { urls: "stun:stun2.l.google.com:19302" },
-            { urls: "stun:stun3.l.google.com:19302" },
-            { urls: "stun:stun4.l.google.com:19302" }
-          ]
+        config: rtcConfig,
+        sdpTransform: (sdp) => {
+          // Modify SDP to optimize media settings and compatibility
+          console.log("Transforming SDP before sending (initiator)");
+          
+          // Improve audio settings
+          sdp = sdp.replace(/a=rtpmap:(\d+) opus\/48000\/2/g, 
+            (match, opusPayloadType) => {
+              // Add audio quality enhancements for Opus
+              return match + '\r\n' +
+                `a=fmtp:${opusPayloadType} minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;cbr=1`;
+            }
+          );
+          
+          // Set proper connection attributes
+          sdp = sdp.replace(/a=ice-options:trickle/g, 'a=ice-options:trickle\r\na=setup:actpass');
+          
+          // Improve video settings if available
+          if (stream && stream.getVideoTracks().length > 0) {
+            // Try to optimize for video quality/performance balance
+            sdp = sdp.replace(/a=rtpmap:(\d+) VP8\/90000/g,
+              (match, vp8PayloadType) => {
+                return match + '\r\n' +
+                  `a=fmtp:${vp8PayloadType} x-google-start-bitrate=800;x-google-min-bitrate=500;x-google-max-bitrate=1500`;
+              }
+            );
+          }
+          
+          // Log modifications for debugging
+          console.log("SDP transformation complete");
+          
+          return sdp;
         }
       });
       
@@ -475,18 +542,65 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
         peers[peerId].signal(signalData);
       } else {
         // Create a new peer connection (non-initiator)
+        console.log(`Creating new non-initiator peer connection to ${peerId}`);
+        
+        // Use the same enhanced WebRTC config as initiator
+        const rtcConfig: RTCConfiguration = {
+          iceServers: [
+            // Standard Google STUN servers
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+            { urls: "stun:stun3.l.google.com:19302" },
+            { urls: "stun:stun4.l.google.com:19302" },
+            // Public STUN servers for better NAT traversal
+            { urls: "stun:stun.stunprotocol.org:3478" },
+            { urls: "stun:stun.voiparound.com" },
+            { urls: "stun:stun.voipbuster.com" },
+            { urls: "stun:stun.voipstunt.com" },
+            { urls: "stun:stun.voxgratia.org" }
+          ],
+          iceTransportPolicy: "all" as RTCIceTransportPolicy,
+          iceCandidatePoolSize: 10,
+        };
+        
+        // Create a new peer connection (non-initiator)
         const peer = new Peer({
           initiator: false,
           trickle: true, // Enable trickle ICE for better connection establishment
           stream: stream || undefined,
-          config: {
-            iceServers: [
-              { urls: "stun:stun.l.google.com:19302" },
-              { urls: "stun:stun1.l.google.com:19302" },
-              { urls: "stun:stun2.l.google.com:19302" },
-              { urls: "stun:stun3.l.google.com:19302" },
-              { urls: "stun:stun4.l.google.com:19302" }
-            ]
+          config: rtcConfig,
+          sdpTransform: (sdp) => {
+            // Modify SDP to optimize media settings and compatibility
+            console.log("Transforming SDP before sending (non-initiator)");
+            
+            // Improve audio settings
+            sdp = sdp.replace(/a=rtpmap:(\d+) opus\/48000\/2/g, 
+              (match, opusPayloadType) => {
+                // Add audio quality enhancements for Opus
+                return match + '\r\n' +
+                  `a=fmtp:${opusPayloadType} minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;cbr=1`;
+              }
+            );
+            
+            // Set proper connection attributes
+            sdp = sdp.replace(/a=ice-options:trickle/g, 'a=ice-options:trickle\r\na=setup:actpass');
+            
+            // Improve video settings if available
+            if (stream && stream.getVideoTracks().length > 0) {
+              // Try to optimize for video quality/performance balance
+              sdp = sdp.replace(/a=rtpmap:(\d+) VP8\/90000/g,
+                (match, vp8PayloadType) => {
+                  return match + '\r\n' +
+                    `a=fmtp:${vp8PayloadType} x-google-start-bitrate=800;x-google-min-bitrate=500;x-google-max-bitrate=1500`;
+                }
+              );
+            }
+            
+            // Log modifications for debugging
+            console.log("SDP transformation complete (non-initiator)");
+            
+            return sdp;
           }
         });
         

@@ -10,7 +10,7 @@ import {
   insertClassroomMemberSchema, insertLectureRecordingSchema 
 } from "@shared/schema";
 import { setupWebSockets } from "./websocket";
-import { testGeminiApi, listAvailableModels } from "./gemini";
+import { testGeminiApi, listAvailableModels, answerQuestion } from "./gemini";
 import { nanoid } from "nanoid";
 
 function isAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
@@ -297,6 +297,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const notes = await storage.getLectureNotes(lectureId);
       res.json(notes);
     } catch (err) {
+      next(err);
+    }
+  });
+  
+  // AI question answering endpoint for lectures
+  app.post("/api/lectures/:lectureId/ai-question", isAuthenticated, async (req, res, next) => {
+    try {
+      const lectureId = parseInt(req.params.lectureId);
+      if (isNaN(lectureId)) {
+        return res.status(400).json({ message: "Invalid lecture ID" });
+      }
+      
+      const lecture = await storage.getLecture(lectureId);
+      if (!lecture) {
+        return res.status(404).json({ message: "Lecture not found" });
+      }
+      
+      // Verify user has access to this lecture
+      const isUserInClassroom = await storage.isUserInClassroom(req.user!.id, lecture.classroomId);
+      if (!isUserInClassroom) {
+        return res.status(403).json({ message: "You don't have access to this lecture" });
+      }
+      
+      const { question } = req.body;
+      if (!question || typeof question !== 'string') {
+        return res.status(400).json({ message: "Valid question is required" });
+      }
+      
+      // Get all lecture notes to provide context for the AI
+      const notes = await storage.getLectureNotes(lectureId);
+      const lectureContext = notes.map(note => note.content).join("\n\n");
+      
+      // Call the Gemini API to answer the question
+      const answer = await answerQuestion(question, lectureContext);
+      
+      res.json({ answer });
+    } catch (err) {
+      console.error("Error in AI question answering:", err);
       next(err);
     }
   });

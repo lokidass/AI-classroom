@@ -38,45 +38,106 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
   // Function to get available media devices
   const getDevices = async () => {
     try {
+      console.log("Enumerating devices...");
       const devices = await navigator.mediaDevices.enumerateDevices();
       
       const audioDevices = devices.filter(device => device.kind === 'audioinput');
       const videoDevices = devices.filter(device => device.kind === 'videoinput');
       
+      console.log(`Found ${audioDevices.length} audio devices and ${videoDevices.length} video devices`);
+      
+      // Log detailed device info to help with debugging
+      if (audioDevices.length > 0) {
+        console.log("Audio devices:", audioDevices.map(device => ({
+          deviceId: device.deviceId.substring(0, 8) + '...',
+          label: device.label || 'Unnamed device'
+        })));
+      }
+      
+      if (videoDevices.length > 0) {
+        console.log("Video devices:", videoDevices.map(device => ({
+          deviceId: device.deviceId.substring(0, 8) + '...',
+          label: device.label || 'Unnamed device'
+        })));
+      }
+      
       setAudioInputDevices(audioDevices);
       setVideoInputDevices(videoDevices);
       
       if (audioDevices.length > 0 && !selectedAudioDevice) {
+        console.log("Setting default audio device:", audioDevices[0].label || 'Default audio device');
         setSelectedAudioDevice(audioDevices[0].deviceId);
       }
       
       if (videoDevices.length > 0 && !selectedVideoDevice) {
+        console.log("Setting default video device:", videoDevices[0].label || 'Default video device');
         setSelectedVideoDevice(videoDevices[0].deviceId);
       }
+      
+      return { audioDevices, videoDevices };
     } catch (error) {
       console.error('Error getting media devices:', error);
+      return { audioDevices: [], videoDevices: [] };
     }
   };
   
   // Initialize devices
   useEffect(() => {
-    getDevices();
+    console.log("Initializing media devices...");
     
-    // Request permission to access devices
-    navigator.mediaDevices.getUserMedia({ audio: true, video: true })
-      .then(stream => {
-        // Stop the stream right away to release the devices
-        stream.getTracks().forEach(track => track.stop());
-        getDevices();
-      })
-      .catch(error => {
-        console.error('Error requesting media permissions:', error);
+    // Initial device discovery - this will be incomplete without permissions
+    getDevices().then(() => {
+      console.log("Initial device enumeration complete");
+    });
+    
+    // Request permissions for at least one type of device to enable full device discovery
+    async function requestInitialPermissions() {
+      console.log("Requesting initial permissions...");
+      
+      // Try different combinations of constraints, in order of preference
+      const constraintOptions = [
+        { audio: true, video: true },  // Ideal case - both permissions
+        { video: true },               // Just video
+        { audio: true }                // Just audio
+      ];
+      
+      let permissionGranted = false;
+      
+      for (const constraints of constraintOptions) {
+        if (permissionGranted) break;
+        
+        try {
+          console.log("Trying to get permission with constraints:", constraints);
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          console.log("Permission granted for:", constraints);
+          
+          // Permission granted - stop the stream to release devices
+          stream.getTracks().forEach(track => {
+            track.stop();
+            console.log(`Stopped ${track.kind} track to release device`);
+          });
+          
+          // Now we can get a complete list of devices
+          await getDevices();
+          permissionGranted = true;
+          
+          console.log("Full device list obtained after permissions granted");
+        } catch (error) {
+          console.warn(`Could not get permission for ${JSON.stringify(constraints)}:`, error);
+        }
+      }
+      
+      if (!permissionGranted) {
+        console.error('Failed to get any media permissions');
         toast({
-          title: "Permission Error",
-          description: "Please allow access to your camera and microphone to use the video feature.",
+          title: "Camera/Microphone Access Required",
+          description: "Please allow access to your camera or microphone to use the video features.",
           variant: "destructive",
         });
-      });
+      }
+    }
+    
+    requestInitialPermissions();
   }, []);
   
   // Toggle audio
@@ -111,12 +172,36 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
   
   // Toggle video
   const toggleVideo = async () => {
-    if (!stream) {
-      // If no stream exists, create one with just video
+    console.log("Toggle video called. Current state:", {
+      stream: stream ? "exists" : "null",
+      videoEnabled,
+      selectedVideoDevice
+    });
+    
+    if (!stream || stream.getVideoTracks().length === 0) {
+      // If no stream exists or no video tracks, create a new stream
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: selectedVideoDevice ? { exact: selectedVideoDevice } : undefined }
-        });
+        console.log("Attempting to get user media for video...");
+        
+        // First, try without specific device ID to ensure we get any camera
+        const constraints = {
+          video: true,
+          // Only include audio if already enabled
+          ...(audioEnabled && { audio: { deviceId: selectedAudioDevice ? { exact: selectedAudioDevice } : undefined } })
+        };
+        
+        console.log("Using constraints:", constraints);
+        
+        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log("Successfully got video stream with", newStream.getVideoTracks().length, "video tracks");
+        
+        // If we already have an audio stream, merge the tracks
+        if (stream && stream.getAudioTracks().length > 0 && audioEnabled) {
+          stream.getAudioTracks().forEach(track => {
+            newStream.addTrack(track);
+          });
+        }
+        
         setStream(newStream);
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = newStream;
@@ -125,15 +210,17 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
       } catch (error) {
         console.error('Error getting video stream:', error);
         toast({
-          title: "Video Error",
-          description: "Failed to access your camera.",
+          title: "Camera Access Error",
+          description: "Could not access your camera. Please check your browser permissions and make sure your camera is properly connected.",
           variant: "destructive",
         });
       }
     } else {
       // Toggle existing video tracks
+      console.log("Toggling existing video tracks. Current state:", videoEnabled);
       stream.getVideoTracks().forEach(track => {
         track.enabled = !videoEnabled;
+        console.log("Set video track enabled to:", !videoEnabled);
       });
       setVideoEnabled(!videoEnabled);
     }
@@ -141,16 +228,52 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
   
   // Join video call
   const joinVideoCall = async () => {
+    console.log("Joining video call...");
     try {
-      // Request both audio and video
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: selectedAudioDevice ? { exact: selectedAudioDevice } : undefined },
-        video: { deviceId: selectedVideoDevice ? { exact: selectedVideoDevice } : undefined }
-      });
+      // First try with simpler constraints to ensure we get at least something
+      console.log("Attempting to get user media with basic constraints");
+      const constraints = {
+        audio: true,
+        video: true
+      };
+      
+      console.log("Using constraints:", constraints);
+      
+      let newStream;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log("Successfully got media stream with basic constraints");
+      } catch (basicError) {
+        console.error("Failed with basic constraints:", basicError);
+        
+        // If that fails, try with even more basic constraints - video only
+        try {
+          console.log("Trying with video-only constraints");
+          newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          console.log("Successfully got video-only stream");
+        } catch (videoError) {
+          console.error("Failed with video-only constraints:", videoError);
+          
+          // If that also fails, try with just audio
+          try {
+            console.log("Trying with audio-only constraints");
+            newStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log("Successfully got audio-only stream");
+          } catch (audioError) {
+            console.error("Failed with audio-only constraints:", audioError);
+            // Re-throw the original error for the catch block
+            throw basicError;
+          }
+        }
+      }
+      
+      console.log("Stream obtained successfully with", 
+        newStream.getVideoTracks().length, "video tracks and",
+        newStream.getAudioTracks().length, "audio tracks");
       
       setStream(newStream);
-      setAudioEnabled(true);
-      setVideoEnabled(true);
+      setAudioEnabled(newStream.getAudioTracks().length > 0);
+      setVideoEnabled(newStream.getVideoTracks().length > 0);
       
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = newStream;
@@ -162,8 +285,8 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
     } catch (error) {
       console.error('Error joining video call:', error);
       toast({
-        title: "Media Error",
-        description: "Failed to access your camera and microphone.",
+        title: "Media Access Error",
+        description: "Failed to access your camera and microphone. Please check your device permissions and ensure your camera is properly connected.",
         variant: "destructive",
       });
     }

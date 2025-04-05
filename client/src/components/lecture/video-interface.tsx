@@ -228,9 +228,26 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
   
   // Join video call
   const joinVideoCall = async () => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to join the video call.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     console.log("Joining video call...");
     try {
-      // Use the same simplified approach that works in our basic video test
+      // Ensure WebSocket is connected and authenticated
+      webSocketClient.connect();
+      webSocketClient.authenticate(user.id);
+      
+      if (lectureId) {
+        webSocketClient.joinLecture(lectureId);
+      }
+
+      // Request media permissions
       console.log("Requesting camera access with basic constraints...");
       
       let newStream;
@@ -1009,10 +1026,14 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
 
   // Initialize WebSocket connection and add websocket event listeners
   useEffect(() => {
-    if (user) {
-      console.log("Connecting to WebSocket server...");
-      webSocketClient.connect();
-      webSocketClient.authenticate(user.id);
+    if (!user?.id) {
+      console.log("No authenticated user found");
+      return;
+    }
+
+    console.log("Connecting to WebSocket server with user ID:", user.id);
+    webSocketClient.connect();
+    webSocketClient.authenticate(user.id);
       
       if (lectureId) {
         console.log(`Joining lecture ${lectureId}...`);

@@ -9,6 +9,7 @@ import { ProtectedRoute } from "@/lib/protected-route";
 import Dashboard from "@/pages/dashboard";
 import Classroom from "@/pages/classroom";
 import Lecture from "@/pages/lecture";
+import QuizView from "@/pages/quiz-view";
 import WebSocketTest from "@/pages/websocket-test";
 
 function Router() {
@@ -18,6 +19,7 @@ function Router() {
       <ProtectedRoute path="/" component={Dashboard} />
       <ProtectedRoute path="/classroom/:id" component={Classroom} />
       <ProtectedRoute path="/lecture/:id" component={Lecture} />
+      <ProtectedRoute path="/quizzes/:id" component={QuizView} />
       <Route path="/websocket-test" component={WebSocketTest} />
       <Route component={NotFound} />
     </Switch>

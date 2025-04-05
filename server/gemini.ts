@@ -10,8 +10,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
  * - "models/gemini-1.5-pro-latest" (recommended)
  * - "models/gemini-1.5-flash-latest" (faster, less powerful)
  * 
- * The old model names like "gemini-pro" or "gemini-1.0-pro" without the 'models/' prefix
- * will result in 404 errors.
+ * Based on our testing, "models/gemini-1.5-pro-latest" works correctly with the v1beta API.
  */
 
 // Initialize the Generative AI API with the API key

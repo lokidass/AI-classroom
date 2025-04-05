@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { 
   Mic, MicOff, Video as VideoIcon, VideoOff, 
   PhoneOff, Share, Users, MessageSquare, Volume2, VolumeX,
-  Circle, Square, FileVideo, RefreshCcw
+  Circle, Square, FileVideo, RefreshCcw, Play, Settings,
+  X, Send
 } from "lucide-react";
 import { webSocketClient } from "@/lib/websocket";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +35,9 @@ export default function WebRTCVideoInterface({ lectureId, isTeacher = false }: V
   const [isJoining, setIsJoining] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [showParticipants, setShowParticipants] = useState(false); 
+  const [showChat, setShowChat] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
   
   // WebRTC state
@@ -657,92 +662,303 @@ export default function WebRTCVideoInterface({ lectureId, isTeacher = false }: V
         </div>
       </div>
       
-      {/* Control buttons */}
-      <div className="flex flex-wrap items-center justify-center gap-3 py-2">
-        <Button
-          variant={audioEnabled ? "default" : "outline"}
-          size="icon"
-          onClick={toggleAudio}
-          className="rounded-full w-10 h-10"
-          disabled={!stream}
-        >
-          {audioEnabled ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
-        </Button>
-        
-        <Button
-          variant={videoEnabled ? "default" : "outline"}
-          size="icon"
-          onClick={toggleVideo}
-          className="rounded-full w-10 h-10"
-          disabled={!stream}
-        >
-          {videoEnabled ? <VideoIcon className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
-        </Button>
-        
-        {isTeacher && (
-          <>
+      {/* Control buttons - Zoom-like interface */}
+      <div className="bg-gray-900 dark:bg-gray-900 rounded-lg p-4 shadow-lg">
+        {/* Main controls row */}
+        <div className="flex flex-wrap items-center justify-center gap-4 py-2 mb-2">
+          <div className="flex flex-col items-center">
             <Button
-              variant={isTranscribing ? "default" : "outline"}
+              variant={audioEnabled ? "default" : "outline"}
               size="icon"
-              onClick={toggleTranscription}
-              className="rounded-full w-10 h-10"
-              title="Toggle Transcription"
+              onClick={toggleAudio}
+              className={`rounded-full w-12 h-12 ${!audioEnabled ? "bg-red-600 text-white hover:bg-red-700" : ""}`}
+              disabled={!stream}
             >
-              {isTranscribing ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+              {audioEnabled ? <Mic className="h-6 w-6" /> : <MicOff className="h-6 w-6" />}
             </Button>
-            
+            <span className="text-xs mt-1 text-gray-300">{audioEnabled ? "Mute" : "Unmute"}</span>
+          </div>
+          
+          <div className="flex flex-col items-center">
             <Button
-              variant={isRecording ? "default" : "outline"}
+              variant={videoEnabled ? "default" : "outline"}
               size="icon"
-              onClick={toggleRecording}
-              className="rounded-full w-10 h-10"
-              title="Toggle Recording"
+              onClick={toggleVideo}
+              className={`rounded-full w-12 h-12 ${!videoEnabled ? "bg-red-600 text-white hover:bg-red-700" : ""}`}
+              disabled={!stream}
             >
-              {isRecording ? <Square className="h-5 w-5" /> : <Circle className="h-5 w-5 fill-red-500" />}
+              {videoEnabled ? <VideoIcon className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
             </Button>
-          </>
-        )}
+            <span className="text-xs mt-1 text-gray-300">{videoEnabled ? "Stop Video" : "Start Video"}</span>
+          </div>
+          
+          {!stream ? (
+            <div className="flex flex-col items-center">
+              <Button
+                variant="default"
+                onClick={startMedia}
+                disabled={isJoining}
+                className={`rounded-full w-12 h-12 ${!isJoining ? "bg-blue-600 hover:bg-blue-700" : ""}`}
+              >
+                <Play className="h-6 w-6" />
+              </Button>
+              <span className="text-xs mt-1 text-gray-300">Join</span>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center">
+              <Button
+                variant="destructive"
+                onClick={leaveVideoCall}
+                className="rounded-full w-12 h-12"
+              >
+                <PhoneOff className="h-6 w-6" />
+              </Button>
+              <span className="text-xs mt-1 text-gray-300">Leave</span>
+            </div>
+          )}
+          
+          <div className="flex flex-col items-center">
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-full w-12 h-12"
+              onClick={() => setShowParticipants(prev => !prev as boolean)}
+            >
+              <Users className="h-6 w-6" />
+            </Button>
+            <span className="text-xs mt-1 text-gray-300">Participants ({connectedPeers.length + 1})</span>
+          </div>
+          
+          <div className="flex flex-col items-center">
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-full w-12 h-12"
+              onClick={() => setShowChat(prev => !prev as boolean)}
+            >
+              <MessageSquare className="h-6 w-6" />
+            </Button>
+            <span className="text-xs mt-1 text-gray-300">Chat</span>
+          </div>
+        </div>
         
-        <Button
-          variant="outline"
-          size="icon"
-          className="rounded-full w-10 h-10"
-          onClick={getDevices}
-          title="Refresh Devices"
-        >
-          <RefreshCcw className="h-5 w-5" />
-        </Button>
-
-        <Button
-          variant="default"
-          onClick={startMedia}
-          disabled={isJoining}
-          className={`ml-auto ${!isJoining ? "bg-green-600 hover:bg-green-700" : ""}`}
-        >
-          {isJoining ? "Connecting..." : "Start Video"}
-        </Button>
-        
-        <Button
-          variant="destructive"
-          onClick={leaveVideoCall}
-          disabled={!stream}
-        >
-          <PhoneOff className="h-5 w-5 mr-2" />
-          Leave
-        </Button>
+        {/* Second row with additional controls */}
+        <div className="flex flex-wrap items-center justify-center gap-4 py-2">
+          {isTeacher && (
+            <>
+              <div className="flex flex-col items-center">
+                <Button
+                  variant={isTranscribing ? "default" : "outline"}
+                  size="icon"
+                  onClick={toggleTranscription}
+                  className="rounded-full w-10 h-10"
+                  title="Toggle Transcription"
+                >
+                  {isTranscribing ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+                </Button>
+                <span className="text-xs mt-1 text-gray-300">Transcribe</span>
+              </div>
+              
+              <div className="flex flex-col items-center">
+                <Button
+                  variant={isRecording ? "default" : "outline"}
+                  size="icon"
+                  onClick={toggleRecording}
+                  className={`rounded-full w-10 h-10 ${isRecording ? "bg-red-600 text-white hover:bg-red-700" : ""}`}
+                  title="Toggle Recording"
+                >
+                  {isRecording ? <Square className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+                </Button>
+                <span className="text-xs mt-1 text-gray-300">Record</span>
+              </div>
+            </>
+          )}
+          
+          <div className="flex flex-col items-center">
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-full w-10 h-10"
+              onClick={() => setShowSettings(prev => !prev as boolean)}
+              title="Settings"
+            >
+              <Settings className="h-5 w-5" />
+            </Button>
+            <span className="text-xs mt-1 text-gray-300">Settings</span>
+          </div>
+          
+          <div className="flex flex-col items-center">
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-full w-10 h-10"
+              onClick={getDevices}
+              title="Refresh Devices"
+            >
+              <RefreshCcw className="h-5 w-5" />
+            </Button>
+            <span className="text-xs mt-1 text-gray-300">Refresh</span>
+          </div>
+        </div>
       </div>
 
-      {/* Debug info */}
-      {debugInfo.length > 0 && (
-        <div className="mt-4 p-2 text-xs bg-gray-100 dark:bg-gray-800 rounded-md max-h-32 overflow-y-auto">
-          <p className="font-semibold mb-1">Debug Info:</p>
-          {debugInfo.slice(-10).map((info, i) => (
-            <div key={i} className="font-mono text-gray-600 dark:text-gray-400">
-              {info}
+      {/* Side panels */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+        {/* Main content area - takes 3/4 on desktop */}
+        <div className={`${(showParticipants || showChat || showSettings) ? 'md:col-span-3' : 'md:col-span-4'}`}>
+          {/* Debug info */}
+          {debugInfo.length > 0 && (
+            <div className="p-2 text-xs bg-gray-100 dark:bg-gray-800 rounded-md max-h-32 overflow-y-auto">
+              <p className="font-semibold mb-1">Debug Info:</p>
+              {debugInfo.slice(-10).map((info, i) => (
+                <div key={i} className="font-mono text-gray-600 dark:text-gray-400">
+                  {info}
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
-      )}
+        
+        {/* Side panel - 1/4 on desktop */}
+        {(showParticipants || showChat || showSettings) && (
+          <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 overflow-hidden flex flex-col">
+            {/* Panel header */}
+            <div className="flex justify-between items-center mb-2 pb-2 border-b">
+              <h3 className="font-medium">
+                {showParticipants && "Participants"}
+                {showChat && "Chat"}
+                {showSettings && "Settings"}
+              </h3>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-8 w-8 p-0 rounded-full"
+                onClick={() => {
+                  setShowParticipants(false);
+                  setShowChat(false);
+                  setShowSettings(false);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {/* Panel content */}
+            <div className="flex-1 overflow-y-auto">
+              {/* Participants panel */}
+              {showParticipants && (
+                <div className="space-y-3">
+                  <div className="flex items-center p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md">
+                    <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white mr-3">
+                      {user?.fullName?.charAt(0) || "U"}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium">{user?.fullName || "You"} (You)</p>
+                      <p className="text-xs text-gray-500">Host</p>
+                    </div>
+                    <div className="flex gap-1">
+                      {audioEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                      {videoEnabled ? <VideoIcon className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                    </div>
+                  </div>
+                  
+                  {connectedPeers.map(peerId => (
+                    <div key={peerId} className="flex items-center p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md">
+                      <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white mr-3">
+                        P
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium">Participant {peerId}</p>
+                        <p className="text-xs text-gray-500">Connected</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* Chat panel */}
+              {showChat && (
+                <div className="flex flex-col h-full">
+                  <div className="flex-1 mb-4 overflow-y-auto">
+                    <p className="text-center text-gray-500 text-sm py-4">
+                      Chat messages will appear here
+                    </p>
+                  </div>
+                  <div className="mt-auto">
+                    <div className="relative">
+                      <Textarea 
+                        placeholder="Type a message..." 
+                        className="pr-10 resize-none"
+                        rows={2}
+                      />
+                      <Button 
+                        className="absolute right-2 bottom-2 h-8 w-8 p-0 rounded-full"
+                        size="sm"
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Settings panel */}
+              {showSettings && (
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium mb-2">Audio Settings</h4>
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="audioDevice">Microphone</Label>
+                        <select
+                          id="audioDevice"
+                          className="w-full px-3 py-2 border rounded-md dark:bg-gray-700"
+                          value={selectedAudioDevice}
+                          onChange={(e) => setSelectedAudioDevice(e.target.value)}
+                        >
+                          {audioDevices.map((device) => (
+                            <option key={device.deviceId} value={device.deviceId}>
+                              {device.label || `Microphone ${device.deviceId.substring(0, 5)}...`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 className="font-medium mb-2">Video Settings</h4>
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="videoDevice">Camera</Label>
+                        <select
+                          id="videoDevice"
+                          className="w-full px-3 py-2 border rounded-md dark:bg-gray-700"
+                          value={selectedVideoDevice}
+                          onChange={(e) => setSelectedVideoDevice(e.target.value)}
+                        >
+                          {videoDevices.map((device) => (
+                            <option key={device.deviceId} value={device.deviceId}>
+                              {device.label || `Camera ${device.deviceId.substring(0, 5)}...`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <Button 
+                    onClick={startMedia} 
+                    className="w-full"
+                  >
+                    Apply Settings
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -37,6 +37,7 @@ export interface IStorage {
   addMemberToClassroom(member: InsertClassroomMember): Promise<ClassroomMember>;
   getClassroomMembers(classroomId: number): Promise<ClassroomMember[]>;
   isUserInClassroom(userId: number, classroomId: number): Promise<boolean>;
+  getUserMembershipInClassroom(userId: number, classroomId: number): Promise<ClassroomMember | undefined>;
   
   // Lecture operations
   createLecture(lecture: InsertLecture): Promise<Lecture>;
@@ -84,6 +85,7 @@ export interface IStorage {
   createQuizResponse(response: InsertQuizResponse): Promise<QuizResponse>;
   getQuizResponse(id: number): Promise<QuizResponse | undefined>;
   getQuizResponsesByUser(userId: number, quizId: number): Promise<QuizResponse[]>;
+  getQuizResponsesByQuiz(quizId: number): Promise<QuizResponse[]>;
   updateQuizResponse(id: number, data: Partial<QuizResponse>): Promise<QuizResponse | undefined>;
   
   // Question response operations
@@ -268,6 +270,14 @@ export class MemStorage implements IStorage {
     // Check if user is a member of the classroom
     const members = await this.getClassroomMembers(classroomId);
     return members.some(member => member.userId === userId);
+  }
+  
+  async getUserMembershipInClassroom(userId: number, classroomId: number): Promise<ClassroomMember | undefined> {
+    // Get all classroom members
+    const members = await this.getClassroomMembers(classroomId);
+    
+    // Find the member with matching userId
+    return members.find(member => member.userId === userId);
   }
   
   // Lecture operations
@@ -543,6 +553,22 @@ export class MemStorage implements IStorage {
         }
         if (a.completedAt) return -1;
         if (b.completedAt) return 1;
+        return (b.startedAt?.getTime() || 0) - (a.startedAt?.getTime() || 0);
+      });
+  }
+  
+  async getQuizResponsesByQuiz(quizId: number): Promise<QuizResponse[]> {
+    return Array.from(this.quizResponses.values())
+      .filter(response => response.quizId === quizId)
+      .sort((a, b) => {
+        // Sort by completedAt date (most recent first)
+        if (a.completedAt && b.completedAt) {
+          return b.completedAt.getTime() - a.completedAt.getTime();
+        }
+        // Completed responses come first
+        if (a.completedAt) return -1;
+        if (b.completedAt) return 1;
+        // For incomplete responses, sort by startedAt (most recent first)
         return (b.startedAt?.getTime() || 0) - (a.startedAt?.getTime() || 0);
       });
   }

@@ -132,14 +132,19 @@ export default function QuizView() {
     
     setIsSubmitting(true);
     
+    console.log("Selected answers:", selectedAnswers);
+    
     // Convert letter answers (A, B, C, D) to number indices (0, 1, 2, 3)
     const answers = Object.entries(selectedAnswers).map(([questionId, answer]) => {
       const index = ['A', 'B', 'C', 'D'].indexOf(answer);
+      console.log(`Converting answer: questionId=${questionId}, letter=${answer}, index=${index}`);
       return {
         questionId: parseInt(questionId),
         selectedOption: index !== -1 ? index : 0
       };
     });
+    
+    console.log("Submitting answers:", answers);
     
     // Submit the quiz
     submitQuizMutation.mutate({

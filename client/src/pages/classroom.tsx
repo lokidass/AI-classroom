@@ -7,7 +7,7 @@ import { useParams, useLocation } from "wouter";
 import { Classroom, Assignment, Material, Lecture, Quiz, QuizQuestion } from "@shared/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Calendar, FileText, Video, Plus, Upload, BookOpen, ClipboardCheck, BookText as QuizIcon, Brain } from "lucide-react";
+import { Loader2, Calendar, FileText, Video, Plus, Upload, BookOpen, ClipboardCheck, BookText as QuizIcon, Brain, Users, Check, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
@@ -36,6 +36,8 @@ export default function ClassroomPage() {
   const [isAddAssignmentOpen, setIsAddAssignmentOpen] = useState(false);
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
   const [isCreateQuizOpen, setIsCreateQuizOpen] = useState(false);
+  const [isViewSubmissionsOpen, setIsViewSubmissionsOpen] = useState(false);
+  const [selectedQuizId, setSelectedQuizId] = useState<number | null>(null);
   
   const classroomId = id ? parseInt(id) : 0;
   
@@ -230,6 +232,38 @@ export default function ClassroomPage() {
   const handleActivateQuiz = (quizId: number) => {
     activateQuizMutation.mutate(quizId);
   };
+  
+  const handleViewSubmissions = (quizId: number) => {
+    setSelectedQuizId(quizId);
+    setIsViewSubmissionsOpen(true);
+  };
+  
+  // Interface for quiz submissions
+  interface QuizSubmission {
+    id: number;
+    userId: number;
+    completed: boolean;
+    score: number | null;
+    completedAt: string | null;
+    startedAt: string;
+    user: {
+      id: number;
+      username: string;
+      fullName: string | null;
+    };
+    correctAnswers?: number;
+    totalQuestions?: number;
+  }
+  
+  // Fetch quiz submissions when dialog is open
+  const {
+    data: quizSubmissions,
+    isLoading: isLoadingSubmissions,
+    refetch: refetchSubmissions
+  } = useQuery<QuizSubmission[]>({
+    queryKey: [`/api/quizzes/${selectedQuizId}/submissions`],
+    enabled: !!selectedQuizId && isViewSubmissionsOpen,
+  });
   
   const quizGenerationForm = useForm<z.infer<typeof quizGenerationSchema>>({
     resolver: zodResolver(quizGenerationSchema),
@@ -682,17 +716,29 @@ export default function ClassroomPage() {
                             className="w-full mb-2"
                             onClick={() => navigate(`/quizzes/${quiz.id}`)}
                           >
-                            View Quiz
+                            {user?.role === "student" ? "Take Quiz" : "View Quiz"}
                           </Button>
+                          
                           {user?.role === "teacher" && (
-                            <Button 
-                              variant="outline" 
-                              className="w-full" 
-                              disabled={quiz.isActive === true}
-                              onClick={() => handleActivateQuiz(quiz.id)}
-                            >
-                              {quiz.isActive === true ? "Quiz is Active" : "Activate Quiz"}
-                            </Button>
+                            <>
+                              <Button 
+                                variant="outline" 
+                                className="w-full mb-2" 
+                                onClick={() => handleViewSubmissions(quiz.id)}
+                              >
+                                <Users className="h-4 w-4 mr-2" />
+                                View Submissions
+                              </Button>
+                              
+                              <Button 
+                                variant="outline" 
+                                className="w-full" 
+                                disabled={quiz.isActive === true}
+                                onClick={() => handleActivateQuiz(quiz.id)}
+                              >
+                                {quiz.isActive === true ? "Quiz is Active" : "Activate Quiz"}
+                              </Button>
+                            </>
                           )}
                         </div>
                       </Card>
@@ -1181,6 +1227,100 @@ export default function ClassroomPage() {
               </Form>
             </TabsContent>
           </Tabs>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Quiz Submissions Dialog */}
+      <Dialog open={isViewSubmissionsOpen} onOpenChange={setIsViewSubmissionsOpen}>
+        <DialogContent className="sm:max-w-[900px]">
+          <DialogHeader>
+            <DialogTitle>Quiz Submissions</DialogTitle>
+            <DialogDescription>
+              View all student submissions for this quiz
+            </DialogDescription>
+          </DialogHeader>
+          
+          {isLoadingSubmissions ? (
+            <div className="flex items-center justify-center p-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : quizSubmissions && quizSubmissions.length > 0 ? (
+            <div className="overflow-auto max-h-[500px]">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="text-left border-b">
+                    <th className="py-2 px-4">Student</th>
+                    <th className="py-2 px-4">Status</th>
+                    <th className="py-2 px-4">Score</th>
+                    <th className="py-2 px-4">Submitted</th>
+                    <th className="py-2 px-4">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quizSubmissions.map((submission) => (
+                    <tr key={submission.id} className="border-b hover:bg-gray-50">
+                      <td className="py-3 px-4">
+                        {submission.user.fullName || submission.user.username}
+                      </td>
+                      <td className="py-3 px-4">
+                        {submission.completed ? (
+                          <div className="flex items-center text-green-600">
+                            <Check className="h-4 w-4 mr-1" />
+                            Completed
+                          </div>
+                        ) : (
+                          <div className="flex items-center text-orange-500">
+                            <Loader2 className="h-4 w-4 mr-1" />
+                            In Progress
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        {submission.completed ? (
+                          <div className="font-medium">
+                            {submission.score !== null ? `${submission.score}%` : 'N/A'}
+                          </div>
+                        ) : (
+                          <div className="text-gray-400">--</div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        {submission.completedAt ? (
+                          format(new Date(submission.completedAt), "MMM d, yyyy h:mm a")
+                        ) : (
+                          <div className="text-gray-400">Not submitted</div>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        {submission.completed && submission.correctAnswers !== undefined && submission.totalQuestions !== undefined && (
+                          <div className="text-sm text-gray-600">
+                            {submission.correctAnswers} / {submission.totalQuestions} correct
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <div className="h-12 w-12 mx-auto text-gray-400 mb-4">📝</div>
+              <h3 className="text-lg font-medium mb-2">No Submissions Yet</h3>
+              <p className="text-gray-500 mb-4">
+                No students have submitted this quiz yet. 
+              </p>
+            </div>
+          )}
+          
+          <DialogFooter className="mt-6">
+            <Button
+              variant="outline"
+              onClick={() => setIsViewSubmissionsOpen(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

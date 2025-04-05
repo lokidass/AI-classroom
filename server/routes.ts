@@ -694,6 +694,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "This quiz has no questions" });
       }
       
+      console.log("Processing quiz submission. Answers:", JSON.stringify(answers));
+      
       // Store each answer
       let correctAnswers = 0;
       for (const answer of answers) {
@@ -701,12 +703,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const selectedOptionIndex = parseInt(answer.selectedOption);
         
         if (isNaN(questionId) || isNaN(selectedOptionIndex)) {
+          console.log(`Skipping invalid answer format: ${JSON.stringify(answer)}`);
           continue;
         }
         
         // Find the question
         const question = questions.find(q => q.id === questionId);
         if (!question) {
+          console.log(`Question not found: ${questionId}`);
           continue;
         }
         
@@ -719,10 +723,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           userAnswer = String(selectedOptionIndex); // Fallback to the index itself
         }
         
+        console.log(`Question ${questionId}: Selected option ${selectedOptionIndex} = "${userAnswer}"`);
+        console.log(`Correct answer: "${question.correctAnswer}"`);
+        
         // Check if the answer is correct
         const isCorrect = question.correctAnswer === userAnswer;
         if (isCorrect) {
           correctAnswers++;
+          console.log(`Answer is CORRECT`);
+        } else {
+          console.log(`Answer is INCORRECT`);
         }
         
         // Store the response
@@ -736,6 +746,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Calculate score as percentage
       const score = questions.length > 0 ? (correctAnswers / questions.length) * 100 : 0;
+      console.log(`Quiz submission scored ${score}% (${correctAnswers}/${questions.length})`);
       
       // Update the quiz response
       const updatedResponse = await storage.updateQuizResponse(responseId, {
@@ -750,6 +761,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalQuestions: questions.length,
         score
       });
+    } catch (err) {
+      console.error("Error submitting quiz:", err);
+      next(err);
+    }
+  });
+  
+  // Endpoint for teachers to get quiz responses for a specific quiz
+  app.get("/api/quizzes/:quizId/responses", isAuthenticated, async (req, res, next) => {
+    try {
+      const quizId = parseInt(req.params.quizId);
+      if (isNaN(quizId)) {
+        return res.status(400).json({ message: "Invalid quiz ID" });
+      }
+      
+      // Get the quiz to check permissions
+      const quiz = await storage.getQuiz(quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+      
+      // Check if user is a teacher in the classroom
+      const membership = await storage.getUserMembershipInClassroom(req.user!.id, quiz.classroomId);
+      if (!membership || membership.role !== 'teacher') {
+        return res.status(403).json({ message: "Only teachers can view submissions" });
+      }
+      
+      // Get all responses for this quiz
+      const responses = await storage.getQuizResponsesByQuiz(quizId);
+      
+      // Enrich the data with user information
+      const enrichedResponses = await Promise.all(
+        responses.map(async (response) => {
+          const user = await storage.getUser(response.userId);
+          return {
+            ...response,
+            user: user ? {
+              id: user.id,
+              username: user.username,
+              fullName: user.fullName
+            } : null
+          };
+        })
+      );
+      
+      res.json(enrichedResponses);
     } catch (err) {
       next(err);
     }

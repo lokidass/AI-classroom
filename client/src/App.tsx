@@ -11,6 +11,8 @@ import Classroom from "@/pages/classroom";
 import Lecture from "@/pages/lecture";
 import QuizView from "@/pages/quiz-view";
 import WebSocketTest from "@/pages/websocket-test";
+import MediaTest from "@/pages/media-test";
+import VideoTest from "@/pages/video-test";
 
 function Router() {
   return (
@@ -21,6 +23,8 @@ function Router() {
       <ProtectedRoute path="/lecture/:id" component={Lecture} />
       <ProtectedRoute path="/quizzes/:id" component={QuizView} />
       <Route path="/websocket-test" component={WebSocketTest} />
+      <Route path="/media-test" component={MediaTest} />
+      <Route path="/video-test" component={VideoTest} />
       <Route component={NotFound} />
     </Switch>
   );

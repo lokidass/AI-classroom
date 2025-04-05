@@ -69,7 +69,7 @@ export default function QuizView() {
   // Create quiz response when quiz is loaded
   const startQuizMutation = useMutation({
     mutationFn: async (quizId: number) => {
-      return apiRequest(`/api/quizzes/${quizId}/responses`, 'POST');
+      return apiRequest("POST", `/api/quizzes/${quizId}/responses`);
     },
     onSuccess: (data: any) => {
       setQuizResponse(data as QuizResponseData);
@@ -94,7 +94,7 @@ export default function QuizView() {
   // Submit quiz answers
   const submitQuizMutation = useMutation({
     mutationFn: async (data: { responseId: number, answers: { questionId: number, selectedOption: number }[] }) => {
-      return apiRequest(`/api/quiz-responses/${data.responseId}/submit`, 'POST', {
+      return apiRequest("POST", `/api/quiz-responses/${data.responseId}/submit`, {
         answers: data.answers
       });
     },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, createRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -16,7 +16,7 @@ interface EnhancedVideoInterfaceProps {
 interface Peer {
   id: number;
   name: string;
-  peer?: any; // SimplePeer instance
+  peer?: SimplePeer.Instance;
   stream?: MediaStream;
   videoRef: React.RefObject<HTMLVideoElement>;
 }
@@ -28,8 +28,8 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(false);
-  const [participants, setParticipants] = useState<{id: number, name: string}[]>([]);
   const [peers, setPeers] = useState<Record<number, Peer>>({});
+  const [logs, setLogs] = useState<string[]>([]);
   
   // Refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -37,15 +37,11 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
   // Add a log message
   const addLog = (message: string) => {
     console.log(`[EnhancedVideoInterface] ${message}`);
+    setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
   };
   
   // Initialize WebSocket and media
   useEffect(() => {
-    // Display a simple participant entry
-    setParticipants([
-      { id: -1, name: isTeacher ? "You (Teacher)" : "You (Student)" }
-    ]);
-    
     addLog(`Initializing for lecture ${lectureId}`);
     
     // Start local media stream with a slight delay to ensure the component is fully mounted
@@ -324,7 +320,7 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
               description: "Camera connected, but microphone access failed.",
             });
           } catch (videoErr) {
-            throw new Error("Could not access your camera or microphone. Please check your browser permissions.");
+            throw new Error("Could not access any media devices. Please check your permissions.");
           }
         }
       }
@@ -359,6 +355,18 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
         addLog("Video element reference is null");
       }
       
+      // Add stream to existing peers
+      Object.values(peers).forEach(peer => {
+        if (peer.peer) {
+          try {
+            addLog(`Adding stream to peer ${peer.id}`);
+            peer.peer.addStream(mediaStream);
+          } catch (error) {
+            addLog(`Error adding stream to peer ${peer.id}: ${(error as Error).message}`);
+          }
+        }
+      });
+      
     } catch (error) {
       addLog(`Error accessing media: ${(error as Error).message}`);
       toast({
@@ -383,6 +391,17 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
         localVideoRef.current.srcObject = null;
       }
       
+      // Remove stream from all peers
+      Object.values(peers).forEach(peer => {
+        if (peer.peer) {
+          try {
+            peer.peer.removeStream(localStream);
+          } catch (error) {
+            addLog(`Error removing stream from peer ${peer.id}: ${(error as Error).message}`);
+          }
+        }
+      });
+      
       // Update state
       setLocalStream(null);
       setAudioEnabled(false);
@@ -394,6 +413,11 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
   const toggleAudio = () => {
     if (localStream) {
       const tracks = localStream.getAudioTracks();
+      if (tracks.length === 0) {
+        addLog("No audio tracks available to toggle");
+        return;
+      }
+      
       const newEnabled = !audioEnabled;
       
       tracks.forEach(track => {
@@ -411,6 +435,11 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
   const toggleVideo = () => {
     if (localStream) {
       const tracks = localStream.getVideoTracks();
+      if (tracks.length === 0) {
+        addLog("No video tracks available to toggle");
+        return;
+      }
+      
       const newEnabled = !videoEnabled;
       
       tracks.forEach(track => {
@@ -466,7 +495,7 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
       </div>
     );
   };
-
+  
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {/* Local video */}
@@ -641,6 +670,21 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
             </ul>
           </CardContent>
         </Card>
+        
+        {/* Debug Log - hidden in production
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="text-sm font-medium mb-2">Debug Log</h3>
+            <div className="bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs font-mono h-48 overflow-y-auto">
+              {logs.map((log, i) => (
+                <div key={i} className="whitespace-pre-wrap mb-1">
+                  {log}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        */}
       </div>
     </div>
   );

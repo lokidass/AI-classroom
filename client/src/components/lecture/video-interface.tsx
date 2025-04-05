@@ -230,53 +230,72 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
   const joinVideoCall = async () => {
     console.log("Joining video call...");
     try {
-      // First try with simpler constraints to ensure we get at least something
-      console.log("Attempting to get user media with basic constraints");
-      const constraints = {
-        audio: true,
-        video: true
-      };
+      // Use the most basic constraint possible
+      console.log("Requesting camera access with basic constraints...");
       
-      console.log("Using constraints:", constraints);
-      
-      let newStream;
-      try {
-        newStream = await navigator.mediaDevices.getUserMedia(constraints);
-        console.log("Successfully got media stream with basic constraints");
-      } catch (basicError) {
-        console.error("Failed with basic constraints:", basicError);
-        
-        // If that fails, try with even more basic constraints - video only
-        try {
-          console.log("Trying with video-only constraints");
-          newStream = await navigator.mediaDevices.getUserMedia({ video: true });
-          console.log("Successfully got video-only stream");
-        } catch (videoError) {
-          console.error("Failed with video-only constraints:", videoError);
-          
-          // If that also fails, try with just audio
-          try {
-            console.log("Trying with audio-only constraints");
-            newStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            console.log("Successfully got audio-only stream");
-          } catch (audioError) {
-            console.error("Failed with audio-only constraints:", audioError);
-            // Re-throw the original error for the catch block
-            throw basicError;
-          }
-        }
-      }
+      // Important: Use { video: true } only first to simplify the process
+      // Browser support for complex constraints can be unreliable
+      const newStream = await navigator.mediaDevices.getUserMedia({ 
+        video: true,
+        audio: true
+      });
       
       console.log("Stream obtained successfully with", 
         newStream.getVideoTracks().length, "video tracks and",
         newStream.getAudioTracks().length, "audio tracks");
       
+      // Get detailed information about video tracks to help troubleshoot
+      if (newStream.getVideoTracks().length > 0) {
+        const videoTrack = newStream.getVideoTracks()[0];
+        console.log("Video track details:", {
+          label: videoTrack.label,
+          id: videoTrack.id,
+          enabled: videoTrack.enabled,
+          readyState: videoTrack.readyState,
+          contentHint: videoTrack.contentHint,
+          muted: videoTrack.muted
+        });
+        
+        // Force enable the track
+        videoTrack.enabled = true;
+      }
+      
+      // Set state immediately
       setStream(newStream);
       setAudioEnabled(newStream.getAudioTracks().length > 0);
       setVideoEnabled(newStream.getVideoTracks().length > 0);
       
+      // Handle the video element directly
       if (localVideoRef.current) {
+        console.log("Setting srcObject on local video element");
+        
+        // Force clean any previous stream
+        if (localVideoRef.current.srcObject) {
+          console.log("Cleaning previous srcObject");
+          localVideoRef.current.srcObject = null;
+        }
+        
+        // Set the new stream
         localVideoRef.current.srcObject = newStream;
+        
+        // Make sure autoplay and other attributes are set
+        localVideoRef.current.autoplay = true;
+        localVideoRef.current.playsInline = true;
+        localVideoRef.current.muted = true; // Mute local video to avoid feedback
+        
+        // Force play the video element (for iOS and some other browsers)
+        try {
+          const playPromise = localVideoRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => console.log("Video playback started successfully"))
+              .catch(err => console.error("Error playing video:", err));
+          }
+        } catch (playError) {
+          console.error("Error calling play():", playError);
+        }
+      } else {
+        console.error("Local video ref is null! Can't attach stream");
       }
       
       // Join the WebSocket video room
@@ -286,7 +305,7 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
       console.error('Error joining video call:', error);
       toast({
         title: "Media Access Error",
-        description: "Failed to access your camera and microphone. Please check your device permissions and ensure your camera is properly connected.",
+        description: "Failed to access your camera and microphone. Please check your browser permissions and ensure your camera is properly connected.",
         variant: "destructive",
       });
     }
@@ -493,6 +512,60 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
       remoteVideoRefs.current[peerId] = null;
     });
   }, [connectedPeers]);
+  
+  // Debug video element and stream status - helps diagnose black screen issues
+  useEffect(() => {
+    // Debug function to log detailed video and stream information
+    const logVideoDebugInfo = () => {
+      if (!localVideoRef.current) {
+        console.log("VIDEO DEBUG: Local video ref is null");
+        return;
+      }
+      
+      const videoEl = localVideoRef.current;
+      console.log("VIDEO DEBUG INFO:", {
+        // Video element properties
+        videoWidth: videoEl.videoWidth, 
+        videoHeight: videoEl.videoHeight,
+        readyState: videoEl.readyState,
+        networkState: videoEl.networkState,
+        paused: videoEl.paused,
+        error: videoEl.error,
+        srcObject: videoEl.srcObject ? "Set" : "Not set",
+        
+        // Stream info
+        stream: stream ? {
+          active: stream.active,
+          id: stream.id,
+          videoTracks: stream.getVideoTracks().map(track => ({
+            enabled: track.enabled,
+            readyState: track.readyState,
+            muted: track.muted,
+            label: track.label,
+            id: track.id
+          })),
+          audioTracks: stream.getAudioTracks().map(track => ({
+            enabled: track.enabled,
+            readyState: track.readyState,
+            muted: track.muted,
+            label: track.label,
+            id: track.id
+          }))
+        } : "No stream"
+      });
+    };
+    
+    // Log immediately when stream changes
+    if (stream) {
+      console.log("Stream changed - immediate debug info:");
+      logVideoDebugInfo();
+    }
+    
+    // Set up periodic logging
+    const debugInterval = setInterval(logVideoDebugInfo, 3000);
+    
+    return () => clearInterval(debugInterval);
+  }, [stream]);
   
   // Speech recognition for transcript generation
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -970,11 +1043,16 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
           ) : (
             <video
               ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-            />
+              autoPlay={true}
+              playsInline={true}
+              muted={true}
+              controls={false}
+              className="w-full h-full bg-black object-cover rounded-lg"
+              style={{ minHeight: '240px', backgroundColor: '#000' }}
+            >
+              {/* Add fallback text for browsers that don't support video */}
+              Your browser does not support video playback.
+            </video>
           )}
           
           {/* Remote video thumbnails */}
@@ -987,10 +1065,15 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
                 >
                   <video
                     ref={el => remoteVideoRefs.current[peerId] = el}
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
+                    autoPlay={true}
+                    playsInline={true}
+                    muted={false}
+                    className="w-full h-full bg-black object-cover"
+                    style={{ backgroundColor: '#000' }}
+                  >
+                    {/* Fallback text */}
+                    Your browser does not support video playback.
+                  </video>
                 </div>
               ))}
             </div>

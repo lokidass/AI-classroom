@@ -230,104 +230,104 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
   const joinVideoCall = async () => {
     console.log("Joining video call...");
     try {
-      // Use the most basic constraint possible
+      // Use the same simplified approach that works in our basic video test
       console.log("Requesting camera access with basic constraints...");
       
       let newStream;
       
       // First try video and audio together
       try {
-        newStream = await navigator.mediaDevices.getUserMedia({ 
-          video: true,
+        console.log("Attempting to get user media with video and audio...");
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            width: { ideal: 640 },
+            height: { ideal: 480 } 
+          },
           audio: true
         });
-        console.log("Successfully got both video and audio");
-      } catch (mediaError) {
-        console.warn("Could not get both video and audio:", mediaError);
+        console.log("Successfully got both video and audio.");
+      } catch (err) {
+        console.warn("Could not get both video and audio:", err);
         
-        // If that fails, try just video
+        // Try with just video
         try {
-          newStream = await navigator.mediaDevices.getUserMedia({ 
-            video: true 
+          console.log("Attempting to get just video...");
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: true
           });
-          console.log("Successfully got just video");
-        } catch (videoError) {
-          console.warn("Could not get video:", videoError);
+          console.log("Successfully got just video.");
+        } catch (videoErr) {
+          console.warn("Could not get video:", videoErr);
           
-          // If that fails too, try just audio
-          newStream = await navigator.mediaDevices.getUserMedia({ 
-            audio: true 
+          // Try with just audio
+          console.log("Attempting to get just audio...");
+          newStream = await navigator.mediaDevices.getUserMedia({
+            audio: true
           });
-          console.log("Successfully got just audio");
+          console.log("Successfully got just audio.");
         }
       }
       
-      console.log("Stream obtained successfully with", 
-        newStream.getVideoTracks().length, "video tracks and",
-        newStream.getAudioTracks().length, "audio tracks");
+      // Log the tracks we got
+      console.log(`Stream obtained with ${newStream.getVideoTracks().length} video tracks and ${newStream.getAudioTracks().length} audio tracks`);
       
-      // Get detailed information about video tracks to help troubleshoot
-      if (newStream.getVideoTracks().length > 0) {
-        const videoTrack = newStream.getVideoTracks()[0];
-        console.log("Video track details:", {
-          label: videoTrack.label,
-          id: videoTrack.id,
-          enabled: videoTrack.enabled,
-          readyState: videoTrack.readyState,
-          contentHint: videoTrack.contentHint,
-          muted: videoTrack.muted
-        });
-        
-        // Force enable the track
-        videoTrack.enabled = true;
-      }
-      
-      // Force enable audio tracks too
-      if (newStream.getAudioTracks().length > 0) {
-        newStream.getAudioTracks().forEach(track => {
-          track.enabled = true;
-        });
-      }
+      // Enable all tracks
+      newStream.getTracks().forEach(track => {
+        track.enabled = true;
+        console.log(`Enabled ${track.kind} track: ${track.label}`);
+      });
       
       // Set state immediately
       setStream(newStream);
       setAudioEnabled(newStream.getAudioTracks().length > 0);
       setVideoEnabled(newStream.getVideoTracks().length > 0);
       
-      // Handle the video element directly - Add a small delay to ensure DOM is ready
+      // Attach to video element with a small delay to ensure DOM is ready
       setTimeout(() => {
         if (localVideoRef.current) {
-          console.log("Setting srcObject on local video element");
+          console.log("Setting video element source");
           
-          // Force clean any previous stream
+          // Clean up any previous stream
           if (localVideoRef.current.srcObject) {
-            console.log("Cleaning previous srcObject");
+            console.log("Clearing previous srcObject");
             localVideoRef.current.srcObject = null;
           }
           
           // Set the new stream
           localVideoRef.current.srcObject = newStream;
           
-          // Make sure autoplay and other attributes are set
+          // Ensure proper attributes
           localVideoRef.current.autoplay = true;
           localVideoRef.current.playsInline = true;
           localVideoRef.current.muted = true; // Mute local video to avoid feedback
           
-          // Force play the video element (for iOS and some other browsers)
+          // Try to start playback
           try {
             const playPromise = localVideoRef.current.play();
             if (playPromise !== undefined) {
               playPromise
                 .then(() => console.log("Video playback started successfully"))
-                .catch(err => console.error("Error playing video:", err));
+                .catch(err => {
+                  console.error("Error playing video:", err);
+                  toast({
+                    title: "Video Playback Error",
+                    description: `Could not start video playback: ${err.message}`,
+                    variant: "destructive",
+                  });
+                });
             }
           } catch (playError) {
             console.error("Error calling play():", playError);
           }
         } else {
-          console.error("Local video ref is null! Can't attach stream");
+          console.error("Video ref is null, cannot attach stream");
+          toast({
+            title: "Video Display Error",
+            description: "Could not display video. Please try refreshing the page.",
+            variant: "destructive",
+          });
         }
-      }, 100);
+      }, 200); // Slightly longer delay to ensure DOM is ready
       
       // Join the WebSocket video room
       webSocketClient.joinVideo();

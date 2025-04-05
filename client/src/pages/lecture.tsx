@@ -245,7 +245,10 @@ export default function LecturePage() {
             </div>
             
             {/* Video Interface */}
-            <BasicVideoTest />
+            <VideoInterface 
+              lectureId={lectureId} 
+              isTeacher={isTeacher}
+            />
           </div>
           
           {/* Tab Interface */}

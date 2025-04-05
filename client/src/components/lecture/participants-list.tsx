@@ -28,9 +28,16 @@ export default function ParticipantsList({ lectureId }: ParticipantsListProps) {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Get the classroom ID for the lecture
+  const { data: lecture } = useQuery({
+    queryKey: [`/api/lectures/${lectureId}`],
+    enabled: !!lectureId,
+  });
+  
   // Fetch classroom members
   const { data: classroomMembers, isLoading } = useQuery({
-    queryKey: [`/api/classrooms/members/${lectureId}`],
+    queryKey: [`/api/classrooms/${lecture?.classroomId}/members`],
+    enabled: !!lecture?.classroomId,
   });
   
   // Simulate connected peers from WebSocket with audio/video state

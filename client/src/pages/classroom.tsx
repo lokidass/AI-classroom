@@ -35,7 +35,7 @@ export default function ClassroomPage() {
   const [isAddAssignmentOpen, setIsAddAssignmentOpen] = useState(false);
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
   
-  const classroomId = parseInt(id);
+  const classroomId = id ? parseInt(id) : 0;
   
   // Fetch classroom data
   const { 
@@ -73,6 +73,26 @@ export default function ClassroomPage() {
     queryKey: [`/api/classrooms/${classroomId}/lectures/active`],
     enabled: !!classroomId,
     retry: false,
+  });
+  
+  // Define the type for classroom members
+  interface ClassroomMember {
+    userId: number;
+    user: {
+      id: number;
+      username: string;
+      fullName: string | null;
+      role: string;
+    };
+  }
+  
+  // Fetch classroom members
+  const {
+    data: classroomMembers,
+    isLoading: isLoadingMembers
+  } = useQuery<ClassroomMember[]>({
+    queryKey: [`/api/classrooms/${classroomId}/members`],
+    enabled: !!classroomId,
   });
   
   // Create lecture mutation
@@ -438,7 +458,7 @@ export default function ClassroomPage() {
                         <CardHeader>
                           <CardTitle>{material.title}</CardTitle>
                           <CardDescription>
-                            {format(new Date(material.createdAt), "MMM d, yyyy")}
+                            {material.createdAt ? format(new Date(material.createdAt), "MMM d, yyyy") : "Date not available"}
                           </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -484,7 +504,73 @@ export default function ClassroomPage() {
                     <CardDescription>View all members of this classroom</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-gray-500">Coming soon...</p>
+                    {isLoadingMembers ? (
+                      <div className="flex items-center justify-center p-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    ) : classroomMembers && classroomMembers.length > 0 ? (
+                      <div className="space-y-8">
+                        {/* Teacher section */}
+                        <div>
+                          <h3 className="font-medium text-sm text-gray-500 uppercase tracking-wider mb-4">
+                            Teacher
+                          </h3>
+                          <div className="space-y-4">
+                            {classroomMembers
+                              .filter(member => member.user.role === 'teacher')
+                              .map(member => (
+                                <div key={member.userId} className="flex items-center p-3 rounded-md hover:bg-gray-50">
+                                  <div className="h-10 w-10 rounded-full bg-primary text-white flex items-center justify-center mr-3">
+                                    {member.user.fullName ? member.user.fullName.charAt(0).toUpperCase() : member.user.username.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">{member.user.fullName || member.user.username}</p>
+                                    <p className="text-sm text-gray-500">{member.user.role}</p>
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                        
+                        {/* Students section */}
+                        <div>
+                          <h3 className="font-medium text-sm text-gray-500 uppercase tracking-wider mb-4">
+                            Students ({classroomMembers.filter(member => member.user.role === 'student').length})
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {classroomMembers
+                              .filter(member => member.user.role === 'student')
+                              .map(member => (
+                                <div key={member.userId} className="flex items-center p-3 rounded-md hover:bg-gray-50">
+                                  <div className="h-10 w-10 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center mr-3">
+                                    {member.user.fullName ? member.user.fullName.charAt(0).toUpperCase() : member.user.username.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <p className="font-medium">{member.user.fullName || member.user.username}</p>
+                                    <p className="text-sm text-gray-500">{member.user.role}</p>
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="h-12 w-12 mx-auto text-gray-400 mb-4">👥</div>
+                        <h3 className="text-lg font-medium mb-2">No members yet</h3>
+                        <p className="text-gray-500 mb-4">
+                          {user?.role === 'teacher' 
+                            ? "Share your class code with students to join." 
+                            : "You are the only member in this classroom."}
+                        </p>
+                        {user?.role === 'teacher' && (
+                          <div className="mt-4 p-4 bg-gray-50 rounded-md border border-gray-200 inline-block">
+                            <p className="text-sm text-gray-500 mb-2">Class Code</p>
+                            <p className="font-mono text-lg">{classroom.code}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>

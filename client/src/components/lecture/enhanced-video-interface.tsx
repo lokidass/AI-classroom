@@ -29,43 +29,19 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
   
   // Initialize media
   useEffect(() => {
-    startLocalStream();
+    // Display a simple participant entry
+    setParticipants([
+      { id: -1, name: isTeacher ? "You (Teacher)" : "You (Student)" }
+    ]);
     
-    // Setup WebSocket event listeners for participants
-    webSocketClient.on("participant_joined", (data) => {
-      addLog(`Participant joined: ${JSON.stringify(data)}`);
-      setParticipants(prev => {
-        // Check if participant already exists
-        if (prev.find(p => p.id === data.userId)) {
-          return prev;
-        }
-        return [...prev, { id: data.userId, name: data.userName || `User ${data.userId}` }];
-      });
-    });
-    
-    webSocketClient.on("participant_left", (data) => {
-      addLog(`Participant left: ${JSON.stringify(data)}`);
-      setParticipants(prev => prev.filter(p => p.id !== data.userId));
-    });
-    
-    // Fetch initial participants
-    if (webSocketClient) {
-      // Using the message method from websocket client
-      webSocketClient.sendMessage({
-        type: "get_participants",
-        payload: { lectureId }
-      });
-    }
-    
-    webSocketClient.on("participants_list", (data) => {
-      addLog(`Received participants list: ${JSON.stringify(data)}`);
-      if (data.lectureId === lectureId) {
-        setParticipants(data.participants || []);
-      }
-    });
+    // Start local media stream with a slight delay to ensure the component is fully mounted
+    const timer = setTimeout(() => {
+      startLocalStream();
+    }, 500);
     
     return () => {
       // Cleanup
+      clearTimeout(timer);
       if (localStream) {
         stopLocalStream();
       }
@@ -76,6 +52,11 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
   const startLocalStream = async () => {
     try {
       addLog("Requesting media access...");
+      
+      // First, check if mediaDevices API is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Your browser doesn't support media device access. Please try a different browser.");
+      }
       
       // Stop any existing stream
       if (localStream) {
@@ -98,20 +79,32 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
         addLog("Successfully got both audio and video");
+        toast({
+          title: "Media Connected",
+          description: "Camera and microphone connected successfully.",
+        });
       } catch (err) {
         // If that fails, try just audio
         addLog(`Error getting both: ${(err as Error).message}, trying audio only`);
         try {
           mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           addLog("Successfully got just audio");
+          toast({
+            title: "Audio Only",
+            description: "Microphone connected, but camera access failed.",
+          });
         } catch (audioErr) {
           // If that fails, try just video
           addLog(`Error getting audio: ${(audioErr as Error).message}, trying video only`);
           try {
             mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
             addLog("Successfully got just video");
+            toast({
+              title: "Video Only",
+              description: "Camera connected, but microphone access failed.",
+            });
           } catch (videoErr) {
-            throw new Error("Could not access any media devices");
+            throw new Error("Could not access your camera or microphone. Please check your browser permissions.");
           }
         }
       }
@@ -217,26 +210,56 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
       <div className="md:col-span-2">
         <Card>
           <CardContent className="p-4">
+            <h3 className="text-lg font-medium mb-3">Your Video</h3>
+            
             <div className="relative aspect-video bg-slate-800 rounded-lg overflow-hidden flex items-center justify-center mb-4">
               {!localStream || !videoEnabled ? (
                 <div className="text-center text-white p-4">
                   <VideoOff className="h-12 w-12 mx-auto mb-2 opacity-50" />
                   <p className="text-lg font-medium">Camera is off</p>
-                  <p className="text-sm text-gray-400">Start video to preview your camera</p>
+                  {localStream ? (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="mt-2 bg-white/20 hover:bg-white/30 text-white"
+                      onClick={toggleVideo}
+                    >
+                      Turn on camera
+                    </Button>
+                  ) : (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="mt-2 bg-white/20 hover:bg-white/30 text-white"
+                      onClick={startLocalStream}
+                    >
+                      Start media
+                    </Button>
+                  )}
                 </div>
               ) : (
-                <video
-                  ref={localVideoRef}
-                  className="w-full h-full object-cover"
-                  autoPlay
-                  playsInline
-                  muted={!audioEnabled}
-                  controls={false}
-                />
+                <>
+                  <video
+                    ref={localVideoRef}
+                    className="w-full h-full object-cover"
+                    autoPlay
+                    playsInline
+                    muted={true} // Always mute local video to prevent feedback
+                    controls={false}
+                  />
+                  {/* Audio indicator */}
+                  <div className="absolute bottom-2 right-2 bg-black/40 p-1 rounded-md">
+                    {audioEnabled ? (
+                      <Mic className="h-5 w-5 text-green-400" />
+                    ) : (
+                      <MicOff className="h-5 w-5 text-red-400" />
+                    )}
+                  </div>
+                </>
               )}
             </div>
             
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap justify-between items-center gap-2">
               <div className="space-x-2">
                 <Button 
                   variant={audioEnabled ? "default" : "outline"}
@@ -257,14 +280,15 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
                 </Button>
               </div>
               
-              <div className="space-x-2">
+              <div>
                 <Button 
                   variant="outline"
                   size="sm"
                   onClick={startLocalStream}
+                  className="whitespace-nowrap"
                 >
                   <RefreshCcw className="h-4 w-4 mr-2" />
-                  Restart Media
+                  {localStream ? "Restart Media" : "Start Media"}
                 </Button>
               </div>
             </div>
@@ -272,8 +296,24 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
         </Card>
       </div>
       
-      {/* Participants List */}
-      <div>
+      {/* Participants and Status */}
+      <div className="space-y-4">
+        {/* Lecture status */}
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="text-lg font-medium mb-2">Status</h3>
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+              <p className="text-sm">Lecture is active</p>
+            </div>
+            <div className="mt-2 text-xs text-gray-500">
+              <p>Video: {localStream?.getVideoTracks().length ? "Connected" : "Not connected"}</p>
+              <p>Audio: {localStream?.getAudioTracks().length ? "Connected" : "Not connected"}</p>
+            </div>
+          </CardContent>
+        </Card>
+        
+        {/* Participants List */}
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-4">
@@ -296,12 +336,12 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
                     className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
                   >
                     <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center mr-3">
-                      {participant.name[0]}
+                      {participant.name[0]?.toUpperCase() || '?'}
                     </div>
                     <div>
                       <p className="text-sm font-medium">{participant.name}</p>
                       <p className="text-xs text-gray-500">
-                        {isTeacher && participant.id === -1 ? "Teacher" : "Student"}
+                        {participant.id === -1 ? (isTeacher ? "Teacher (You)" : "Student (You)") : "Participant"}
                       </p>
                     </div>
                   </li>

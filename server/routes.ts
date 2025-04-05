@@ -62,6 +62,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const classroom = await storage.createClassroom(data);
+      
+      // Automatically add the teacher as a member of the classroom
+      await storage.addMemberToClassroom({
+        classroomId: classroom.id,
+        userId: req.user.id,
+        role: "teacher"
+      });
+      
       res.status(201).json(classroom);
     } catch (err) {
       next(err);

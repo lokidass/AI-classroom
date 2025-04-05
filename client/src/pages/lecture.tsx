@@ -6,6 +6,7 @@ import { Lecture, Classroom } from "@shared/schema";
 import { webSocketClient } from "@/lib/websocket";
 import Header from "@/components/layout/header";
 import VideoInterface from "@/components/lecture/video-interface";
+import BasicVideoTest from "@/components/lecture/basic-video-test";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LiveNotes from "@/components/lecture/live-notes";
 import AIAssistant from "@/components/lecture/ai-assistant";
@@ -27,7 +28,7 @@ export default function LecturePage() {
   const wsInitialized = useRef(false);
   const isTeacher = user?.role === "teacher";
   
-  const lectureId = parseInt(id);
+  const lectureId = parseInt(id || "0");
   
   // Fetch lecture data
   const { 
@@ -222,7 +223,7 @@ export default function LecturePage() {
               <div>
                 <h2 className="text-xl font-medium text-gray-800">{lecture.title}</h2>
                 <p className="text-sm text-gray-500">
-                  {classroom?.name || "Loading..."} • Started {new Date(lecture.startTime).toLocaleTimeString()}
+                  {classroom?.name || "Loading..."} • Started {new Date(lecture.startTime ? lecture.startTime : Date.now()).toLocaleTimeString()}
                 </p>
               </div>
               <div className="flex space-x-2">
@@ -244,10 +245,7 @@ export default function LecturePage() {
             </div>
             
             {/* Video Interface */}
-            <VideoInterface 
-              lectureId={lectureId} 
-              isTeacher={isTeacher}
-            />
+            <BasicVideoTest />
           </div>
           
           {/* Tab Interface */}

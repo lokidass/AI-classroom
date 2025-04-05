@@ -26,8 +26,8 @@ if (!API_KEY) {
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// The model name to use with the v1beta API version - fix for "model not found" errors
-const MODEL_NAME = "gemini-pro";
+// The model name to use with the v1beta API version - using a model explicitly from the available models list
+const MODEL_NAME = "models/gemini-1.5-pro-latest";
 
 // Function to generate notes from transcription
 export async function generateNotesFromTranscription(transcription: string) {

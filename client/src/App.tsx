@@ -14,6 +14,7 @@ import WebSocketTest from "@/pages/websocket-test";
 import MediaTest from "@/pages/media-test";
 import VideoTest from "@/pages/video-test";
 import SimpleVideoTest from "@/pages/simple-video-test";
+import GeminiTest from "@/pages/gemini-test";
 
 function Router() {
   return (
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/media-test" component={MediaTest} />
       <Route path="/video-test" component={VideoTest} />
       <Route path="/simple-video-test" component={SimpleVideoTest} />
+      <Route path="/gemini-test" component={GeminiTest} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -13,6 +13,7 @@ import QuizView from "@/pages/quiz-view";
 import WebSocketTest from "@/pages/websocket-test";
 import MediaTest from "@/pages/media-test";
 import VideoTest from "@/pages/video-test";
+import WebRTCTest from "@/pages/webrtc-test";
 
 function Router() {
   return (
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/websocket-test" component={WebSocketTest} />
       <Route path="/media-test" component={MediaTest} />
       <Route path="/video-test" component={VideoTest} />
+      <Route path="/webrtc-test" component={WebRTCTest} />
       <Route component={NotFound} />
     </Switch>
   );

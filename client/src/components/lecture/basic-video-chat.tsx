@@ -170,6 +170,16 @@ export default function BasicVideoChat({ lectureId, isTeacher = false }: BasicVi
       peers.current.delete(peerId);
     }
     
+    // Remove video element
+    const container = document.getElementById('remote-videos-container');
+    const videoWrapper = document.querySelector(`.remote-video-wrapper[data-peer-id="${peerId}"]`);
+    if (container && videoWrapper) {
+      container.removeChild(videoWrapper);
+    }
+    
+    // Remove from videos map
+    remoteVideos.current.delete(peerId);
+    
     // Remove user from the list
     setRemoteUsers(prev => prev.filter(u => u.id !== peerId));
   };
@@ -237,16 +247,25 @@ export default function BasicVideoChat({ lectureId, isTeacher = false }: BasicVi
         // Append the video element to the DOM
         const container = document.getElementById('remote-videos-container');
         if (container) {
-          // First, check if there's already a video for this peer
-          const existingVideo = container.querySelector(`#remote-video-${peerId}`);
-          if (existingVideo) {
-            container.removeChild(existingVideo);
+          // First, check if there's already a wrapper for this peer
+          const existingWrapper = container.querySelector(`.remote-video-wrapper[data-peer-id="${peerId}"]`);
+          if (existingWrapper) {
+            container.removeChild(existingWrapper);
           }
           
           // Create a wrapper for the video
           const wrapper = document.createElement('div');
           wrapper.className = 'remote-video-wrapper';
+          wrapper.setAttribute('data-peer-id', String(peerId));
+          
+          // Append the video to the wrapper
           wrapper.appendChild(videoElement);
+          
+          // Check if the peer has audio and video tracks
+          const hasAudio = stream.getAudioTracks().length > 0;
+          const hasVideo = stream.getVideoTracks().length > 0;
+          const audioEnabled = hasAudio && stream.getAudioTracks()[0].enabled;
+          const videoEnabled = hasVideo && stream.getVideoTracks()[0].enabled;
           
           // Add a label with the peer ID
           const label = document.createElement('div');
@@ -254,6 +273,29 @@ export default function BasicVideoChat({ lectureId, isTeacher = false }: BasicVi
           label.textContent = `Participant ${peerId}`;
           wrapper.appendChild(label);
           
+          // Add audio indicator
+          const audioIndicator = document.createElement('div');
+          audioIndicator.className = `media-indicator audio ${audioEnabled ? 'enabled' : 'disabled'}`;
+          const audioIconSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          audioIconSvg.setAttribute('viewBox', '0 0 24 24');
+          audioIconSvg.setAttribute('fill', 'none');
+          audioIconSvg.setAttribute('stroke', 'currentColor');
+          audioIconSvg.setAttribute('stroke-width', '2');
+          audioIconSvg.setAttribute('stroke-linecap', 'round');
+          audioIconSvg.setAttribute('stroke-linejoin', 'round');
+          
+          if (audioEnabled) {
+            // Mic icon
+            audioIconSvg.innerHTML = '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line>';
+          } else {
+            // MicOff icon
+            audioIconSvg.innerHTML = '<line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line>';
+          }
+          
+          audioIndicator.appendChild(audioIconSvg);
+          wrapper.appendChild(audioIndicator);
+          
+          // Add video to container
           container.appendChild(wrapper);
         }
         
@@ -269,9 +311,9 @@ export default function BasicVideoChat({ lectureId, isTeacher = false }: BasicVi
         
         // Remove the video element
         const container = document.getElementById('remote-videos-container');
-        const videoElement = document.getElementById(`remote-video-${peerId}`);
-        if (container && videoElement) {
-          container.removeChild(videoElement.parentElement || videoElement);
+        const wrapper = document.querySelector(`.remote-video-wrapper[data-peer-id="${peerId}"]`);
+        if (container && wrapper) {
+          container.removeChild(wrapper);
         }
         
         // Clean up references
@@ -646,33 +688,6 @@ export default function BasicVideoChat({ lectureId, isTeacher = false }: BasicVi
           </CardContent>
         </Card>
       </div>
-      
-      <style>{`
-        .remote-video-wrapper {
-          position: relative;
-          aspect-ratio: 16 / 9;
-          overflow: hidden;
-          border-radius: 0.375rem;
-          background-color: #1e293b;
-        }
-        
-        .remote-video-wrapper video {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-        
-        .remote-video-label {
-          position: absolute;
-          bottom: 0.5rem;
-          left: 0.5rem;
-          background-color: rgba(0, 0, 0, 0.6);
-          color: white;
-          padding: 0.25rem 0.5rem;
-          border-radius: 0.25rem;
-          font-size: 0.75rem;
-        }
-      `}</style>
     </div>
   );
 }

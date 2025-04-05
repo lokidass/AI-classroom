@@ -1,6 +1,12 @@
+import 'dotenv/config'; // Load environment variables from .env file
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+
+// Debug environment variables
+console.log("SERVER STARTUP - Environment variables:");
+console.log("SESSION_SECRET:", process.env.SESSION_SECRET ? "Set" : "Not set");
+console.log("GEMINI_API_KEY:", process.env.GEMINI_API_KEY ? "Set" : "Not set");
 
 const app = express();
 app.use(express.json());

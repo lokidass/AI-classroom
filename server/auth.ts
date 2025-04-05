@@ -29,6 +29,10 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupAuth(app: Express) {
+  console.log("Environment variables check:");
+  console.log("SESSION_SECRET:", process.env.SESSION_SECRET ? "Set" : "Not set");
+  console.log("GEMINI_API_KEY:", process.env.GEMINI_API_KEY ? "Set" : "Not set");
+  
   if (!process.env.SESSION_SECRET) {
     console.warn("No SESSION_SECRET set. Using a default secret which is insecure.");
   }
@@ -99,7 +103,7 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err, user, info) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) return next(err);
       if (!user) return res.status(401).json({ message: "Invalid username or password" });
       

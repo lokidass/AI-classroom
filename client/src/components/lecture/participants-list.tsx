@@ -26,6 +26,7 @@ interface Participant {
 export default function ParticipantsList({ lectureId }: ParticipantsListProps) {
   const { user } = useAuth();
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [activeParticipantIds, setActiveParticipantIds] = useState<number[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Get the classroom ID for the lecture
@@ -40,49 +41,122 @@ export default function ParticipantsList({ lectureId }: ParticipantsListProps) {
     enabled: !!lecture?.classroomId,
   });
   
-  // Simulate connected peers from WebSocket with audio/video state
+  // Add the current user as a participant if not already included
+  useEffect(() => {
+    if (user && lectureId) {
+      webSocketClient.on('auth_response', (data) => {
+        if (data.success) {
+          console.log('Auth successful, joining lecture:', lectureId);
+          // Now join the lecture room
+          webSocketClient.joinLecture(lectureId);
+        }
+      });
+      
+      // Make sure we're authenticated with websocket
+      webSocketClient.authenticate(user.id);
+    }
+  }, [user, lectureId]);
+  
+  // Handle peers in lecture updates from WebSocket
   useEffect(() => {
     const handlePeersInLecture = (data: { peers: number[] }) => {
-      // Add connected peers to participants list
-      if (classroomMembers && Array.isArray(classroomMembers)) {
-        // Map classroom members to participants, marking those who are connected via WebSocket
-        const updatedParticipants = classroomMembers.map(member => ({
-          ...member,
-          isAudioOn: data.peers.includes(member.userId) ? Math.random() > 0.7 : false,
-          isVideoOn: data.peers.includes(member.userId) ? Math.random() > 0.5 : false
-        }));
-        
-        setParticipants(updatedParticipants);
-      }
+      console.log('Received peers_in_lecture with peers:', data.peers);
+      // Update active participants
+      setActiveParticipantIds(data.peers);
     };
     
     webSocketClient.on('peers_in_lecture', handlePeersInLecture);
     
+    // Handle peer joined event
+    const handlePeerJoined = (data: { peerId: number }) => {
+      console.log('Peer joined:', data.peerId);
+      setActiveParticipantIds(prev => {
+        if (!prev.includes(data.peerId)) {
+          return [...prev, data.peerId];
+        }
+        return prev;
+      });
+    };
+    
+    // Handle peer left event
+    const handlePeerLeft = (data: { peerId: number }) => {
+      console.log('Peer left:', data.peerId);
+      setActiveParticipantIds(prev => prev.filter(id => id !== data.peerId));
+    };
+    
+    webSocketClient.on('peer_joined', handlePeerJoined);
+    webSocketClient.on('peer_left', handlePeerLeft);
+    
+    // Add current user to active participants if not already included
+    if (user) {
+      setActiveParticipantIds(prev => {
+        if (!prev.includes(user.id)) {
+          return [...prev, user.id];
+        }
+        return prev;
+      });
+    }
+    
     return () => {
       webSocketClient.off('peers_in_lecture', handlePeersInLecture);
+      webSocketClient.off('peer_joined', handlePeerJoined);
+      webSocketClient.off('peer_left', handlePeerLeft);
     };
-  }, [classroomMembers]);
+  }, [user]);
   
-  // Initialize with members when data is loaded
+  // Update participants when classroom members or active participants change
   useEffect(() => {
     if (classroomMembers && Array.isArray(classroomMembers)) {
-      // For initial load, assume all members are in the lecture but audio/video off
-      const initialParticipants = classroomMembers.map(member => ({
+      // Map classroom members to participants, marking those who are actively connected
+      const updatedParticipants = classroomMembers.map(member => ({
         ...member,
-        isAudioOn: false,
-        isVideoOn: false
+        isAudioOn: activeParticipantIds.includes(member.userId),
+        isVideoOn: activeParticipantIds.includes(member.userId),
+        isActive: activeParticipantIds.includes(member.userId)
       }));
       
       // Mark teacher as host
-      initialParticipants.forEach(participant => {
+      updatedParticipants.forEach(participant => {
         if (participant.user.role === 'teacher') {
           participant.isHost = true;
         }
       });
       
-      setParticipants(initialParticipants);
+      // Make sure the current user is included
+      if (user && !updatedParticipants.some(p => p.userId === user.id)) {
+        updatedParticipants.push({
+          userId: user.id,
+          user: {
+            id: user.id,
+            fullName: user.fullName || user.username,
+            username: user.username,
+            role: user.role
+          },
+          isHost: user.role === 'teacher',
+          isAudioOn: true,
+          isVideoOn: false,
+          isActive: true
+        });
+      }
+      
+      setParticipants(updatedParticipants);
+    } else if (user) {
+      // If no classroom members but we have a user, at least show the current user
+      setParticipants([{
+        userId: user.id,
+        user: {
+          id: user.id,
+          fullName: user.fullName || user.username,
+          username: user.username,
+          role: user.role
+        },
+        isHost: user.role === 'teacher',
+        isAudioOn: true,
+        isVideoOn: false,
+        isActive: true
+      }]);
     }
-  }, [classroomMembers]);
+  }, [classroomMembers, activeParticipantIds, user]);
   
   // Filter participants based on search term
   const filteredParticipants = participants.filter(

@@ -7,7 +7,11 @@ import {
   assignments, type Assignment, type InsertAssignment,
   materials, type Material, type InsertMaterial,
   messages, type Message, type InsertMessage,
-  lectureRecordings, type LectureRecording, type InsertLectureRecording
+  lectureRecordings, type LectureRecording, type InsertLectureRecording,
+  quizzes, type Quiz, type InsertQuiz,
+  quizQuestions, type QuizQuestion, type InsertQuizQuestion,
+  quizResponses, type QuizResponse, type InsertQuizResponse,
+  questionResponses, type QuestionResponse, type InsertQuestionResponse
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -65,6 +69,26 @@ export interface IStorage {
   getLectureRecordings(lectureId: number): Promise<LectureRecording[]>;
   getLectureRecording(id: number): Promise<LectureRecording | undefined>;
   
+  // Quiz operations
+  createQuiz(quiz: InsertQuiz): Promise<Quiz>;
+  getQuiz(id: number): Promise<Quiz | undefined>;
+  getQuizzesByClassroom(classroomId: number): Promise<Quiz[]>;
+  getActiveQuizzesByClassroom(classroomId: number): Promise<Quiz[]>;
+  
+  // Quiz question operations
+  createQuizQuestion(question: InsertQuizQuestion): Promise<QuizQuestion>;
+  getQuizQuestions(quizId: number): Promise<QuizQuestion[]>;
+  
+  // Quiz response operations
+  createQuizResponse(response: InsertQuizResponse): Promise<QuizResponse>;
+  getQuizResponse(id: number): Promise<QuizResponse | undefined>;
+  getQuizResponsesByUser(userId: number, quizId: number): Promise<QuizResponse[]>;
+  updateQuizResponse(id: number, data: Partial<QuizResponse>): Promise<QuizResponse | undefined>;
+  
+  // Question response operations
+  createQuestionResponse(response: InsertQuestionResponse): Promise<QuestionResponse>;
+  getQuestionResponsesByQuizResponse(quizResponseId: number): Promise<QuestionResponse[]>;
+  
   // Session store
   sessionStore: session.SessionStore;
 }
@@ -79,6 +103,10 @@ export class MemStorage implements IStorage {
   private materials: Map<number, Material>;
   private messages: Map<number, Message>;
   private lectureRecordings: Map<number, LectureRecording>;
+  private quizzes: Map<number, Quiz>;
+  private quizQuestions: Map<number, QuizQuestion>;
+  private quizResponses: Map<number, QuizResponse>;
+  private questionResponses: Map<number, QuestionResponse>;
   
   public sessionStore: session.SessionStore;
   
@@ -92,6 +120,10 @@ export class MemStorage implements IStorage {
   private materialIdCounter: number;
   private messageIdCounter: number;
   private lectureRecordingIdCounter: number;
+  private quizIdCounter: number;
+  private quizQuestionIdCounter: number;
+  private quizResponseIdCounter: number;
+  private questionResponseIdCounter: number;
 
   constructor() {
     this.users = new Map();
@@ -103,6 +135,10 @@ export class MemStorage implements IStorage {
     this.materials = new Map();
     this.messages = new Map();
     this.lectureRecordings = new Map();
+    this.quizzes = new Map();
+    this.quizQuestions = new Map();
+    this.quizResponses = new Map();
+    this.questionResponses = new Map();
     
     this.userIdCounter = 1;
     this.classroomIdCounter = 1;
@@ -113,6 +149,10 @@ export class MemStorage implements IStorage {
     this.materialIdCounter = 1;
     this.messageIdCounter = 1;
     this.lectureRecordingIdCounter = 1;
+    this.quizIdCounter = 1;
+    this.quizQuestionIdCounter = 1;
+    this.quizResponseIdCounter = 1;
+    this.questionResponseIdCounter = 1;
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // prune expired entries every 24h
@@ -390,6 +430,137 @@ export class MemStorage implements IStorage {
     return Array.from(this.lectureRecordings.values())
       .filter(recording => recording.lectureId === lectureId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // newest first
+  }
+  
+  // Quiz operations
+  async createQuiz(insertQuiz: InsertQuiz): Promise<Quiz> {
+    const id = this.quizIdCounter++;
+    const now = new Date();
+    const quiz: Quiz = {
+      id,
+      title: insertQuiz.title,
+      description: insertQuiz.description ?? null,
+      classroomId: insertQuiz.classroomId,
+      creatorId: insertQuiz.creatorId,
+      contentSource: insertQuiz.contentSource ?? null,
+      createdAt: now,
+      isActive: insertQuiz.isActive ?? true
+    };
+    this.quizzes.set(id, quiz);
+    return quiz;
+  }
+  
+  async getQuiz(id: number): Promise<Quiz | undefined> {
+    return this.quizzes.get(id);
+  }
+  
+  async getQuizzesByClassroom(classroomId: number): Promise<Quiz[]> {
+    return Array.from(this.quizzes.values())
+      .filter(quiz => quiz.classroomId === classroomId)
+      .sort((a, b) => {
+        // Handle null createdAt values (though they shouldn't be null in our implementation)
+        const aTime = a.createdAt?.getTime() || 0;
+        const bTime = b.createdAt?.getTime() || 0;
+        return bTime - aTime; // newest first
+      });
+  }
+  
+  async getActiveQuizzesByClassroom(classroomId: number): Promise<Quiz[]> {
+    return Array.from(this.quizzes.values())
+      .filter(quiz => 
+        quiz.classroomId === classroomId && 
+        quiz.isActive === true
+      )
+      .sort((a, b) => {
+        // Handle null createdAt values
+        const aTime = a.createdAt?.getTime() || 0;
+        const bTime = b.createdAt?.getTime() || 0;
+        return bTime - aTime; // newest first
+      });
+  }
+  
+  // Quiz question operations
+  async createQuizQuestion(insertQuestion: InsertQuizQuestion): Promise<QuizQuestion> {
+    const id = this.quizQuestionIdCounter++;
+    const quizQuestion: QuizQuestion = {
+      id,
+      quizId: insertQuestion.quizId,
+      questionText: insertQuestion.questionText,
+      options: insertQuestion.options ?? null,
+      correctAnswer: insertQuestion.correctAnswer,
+      explanation: insertQuestion.explanation ?? null,
+      order: insertQuestion.order
+    };
+    this.quizQuestions.set(id, quizQuestion);
+    return quizQuestion;
+  }
+  
+  async getQuizQuestions(quizId: number): Promise<QuizQuestion[]> {
+    return Array.from(this.quizQuestions.values())
+      .filter(question => question.quizId === quizId)
+      .sort((a, b) => a.order - b.order); // sort by question order
+  }
+  
+  // Quiz response operations
+  async createQuizResponse(insertResponse: InsertQuizResponse): Promise<QuizResponse> {
+    const id = this.quizResponseIdCounter++;
+    const now = new Date();
+    const quizResponse: QuizResponse = {
+      id,
+      quizId: insertResponse.quizId,
+      userId: insertResponse.userId,
+      completed: insertResponse.completed ?? false,
+      score: insertResponse.score ?? null,
+      startedAt: now,
+      completedAt: insertResponse.completedAt ?? null
+    };
+    this.quizResponses.set(id, quizResponse);
+    return quizResponse;
+  }
+  
+  async getQuizResponse(id: number): Promise<QuizResponse | undefined> {
+    return this.quizResponses.get(id);
+  }
+  
+  async getQuizResponsesByUser(userId: number, quizId: number): Promise<QuizResponse[]> {
+    return Array.from(this.quizResponses.values())
+      .filter(response => response.userId === userId && response.quizId === quizId)
+      .sort((a, b) => {
+        if (a.completedAt && b.completedAt) {
+          return b.completedAt.getTime() - a.completedAt.getTime();
+        }
+        if (a.completedAt) return -1;
+        if (b.completedAt) return 1;
+        return (b.startedAt?.getTime() || 0) - (a.startedAt?.getTime() || 0);
+      });
+  }
+  
+  async updateQuizResponse(id: number, data: Partial<QuizResponse>): Promise<QuizResponse | undefined> {
+    const quizResponse = this.quizResponses.get(id);
+    if (!quizResponse) return undefined;
+    
+    const updatedResponse = { ...quizResponse, ...data };
+    this.quizResponses.set(id, updatedResponse);
+    return updatedResponse;
+  }
+  
+  // Question response operations
+  async createQuestionResponse(insertResponse: InsertQuestionResponse): Promise<QuestionResponse> {
+    const id = this.questionResponseIdCounter++;
+    const questionResponse: QuestionResponse = {
+      id,
+      quizResponseId: insertResponse.quizResponseId,
+      questionId: insertResponse.questionId,
+      userAnswer: insertResponse.userAnswer ?? null,
+      isCorrect: insertResponse.isCorrect ?? null
+    };
+    this.questionResponses.set(id, questionResponse);
+    return questionResponse;
+  }
+  
+  async getQuestionResponsesByQuizResponse(quizResponseId: number): Promise<QuestionResponse[]> {
+    return Array.from(this.questionResponses.values())
+      .filter(response => response.quizResponseId === quizResponseId);
   }
 }
 

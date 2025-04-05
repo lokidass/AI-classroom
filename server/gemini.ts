@@ -265,3 +265,145 @@ export async function processTranscription(transcriptionSegments: string[], prev
     return previousNotes || "Error generating notes. Please try again later.";
   }
 }
+
+// Function to generate a multiple-choice quiz from educational content
+export async function generateQuizFromContent(content: string, numQuestions: number = 10) {
+  if (!API_KEY) {
+    console.error("No Gemini API key provided. Please set the GEMINI_API_KEY environment variable.");
+    return {
+      success: false,
+      error: "Error: No Gemini API key provided. Please set the GEMINI_API_KEY environment variable."
+    };
+  }
+
+  try {
+    // Get the appropriate Gemini model
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+
+    // Prepare the prompt for quiz generation
+    const prompt = `
+    You are an educational quiz creator. Create a multiple-choice quiz based on the following content.
+    
+    Content:
+    "${content}"
+    
+    Please generate exactly ${numQuestions} multiple-choice questions with 4 options each.
+    
+    For each question:
+    1. Include a clear question that tests understanding of a key concept
+    2. Provide 4 possible answers labeled 0, 1, 2, and 3 (NOT A, B, C, D)
+    3. In the correctOption field, put the INDEX (0, 1, 2, or 3) of the correct answer
+    4. Include a brief explanation of why the answer is correct
+    
+    Format your response as a valid JSON array with the following structure:
+    [
+      {
+        "question": "What is the capital of France?",
+        "options": ["New York", "London", "Paris", "Berlin"],
+        "correctOption": 2,
+        "explanation": "Paris is the capital city of France."
+      },
+      {
+        "question": "...",
+        "options": ["...", "...", "...", "..."],
+        "correctOption": 0,
+        "explanation": "..."
+      }
+    ]
+    
+    Ensure that:
+    - All questions are relevant to the provided content
+    - Questions test different aspects of the content
+    - Questions vary in difficulty
+    - All JSON formatting is correct
+    - Exactly 4 options are provided for each question
+    - The correctOption is the INDEX (0-3) of the correct answer in the options array
+    
+    Don't include any additional text before or after the JSON array.
+    `;
+
+    // Generate the response
+    console.log("Sending quiz generation prompt to Gemini API...");
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+    
+    try {
+      // Parse the JSON response
+      const jsonStart = responseText.indexOf('[');
+      const jsonEnd = responseText.lastIndexOf(']') + 1;
+      
+      if (jsonStart === -1 || jsonEnd === 0) {
+        throw new Error("No valid JSON array found in the response");
+      }
+      
+      const jsonString = responseText.substring(jsonStart, jsonEnd);
+      let quizQuestions = JSON.parse(jsonString);
+      
+      // Validate the structure
+      if (!Array.isArray(quizQuestions) || quizQuestions.length === 0) {
+        throw new Error("Invalid quiz questions format");
+      }
+      
+      // Normalize the questions to match our schema and ensure correctOption is a number
+      quizQuestions = quizQuestions.map(q => {
+        // Check for questionText vs question property
+        const question = q.question || q.questionText;
+        
+        // Ensure correctOption is a number between 0-3
+        let correctOption = q.correctOption;
+        
+        // Handle cases where correctOption might be a string with the correct answer
+        if (typeof correctOption === 'string') {
+          // Try to parse as number first
+          const parsedOption = parseInt(correctOption);
+          if (!isNaN(parsedOption) && parsedOption >= 0 && parsedOption <= 3) {
+            correctOption = parsedOption;
+          } else {
+            // If it's not a valid number, find the index of the correct answer in options
+            const optionIndex = q.options.findIndex(
+              opt => opt.toLowerCase() === correctOption.toLowerCase()
+            );
+            correctOption = optionIndex >= 0 ? optionIndex : 0;
+          }
+        }
+        
+        // Ensure options is an array with exactly 4 items
+        const options = Array.isArray(q.options) && q.options.length === 4 
+          ? q.options 
+          : ["Option 1", "Option 2", "Option 3", "Option 4"];
+        
+        return {
+          question,
+          options,
+          correctOption: Number(correctOption),
+          explanation: q.explanation || null
+        };
+      });
+      
+      console.log(`Successfully generated ${quizQuestions.length} quiz questions`);
+      return {
+        success: true,
+        questions: quizQuestions
+      };
+    } catch (parseError) {
+      console.error("Error parsing quiz questions:", parseError);
+      return {
+        success: false,
+        error: "Failed to parse the generated quiz. The AI response was not in the expected format.",
+        rawResponse: responseText
+      };
+    }
+  } catch (error) {
+    console.error("Error generating quiz with Gemini API:", error);
+    // More detailed error information for debugging
+    const errorMessage = error instanceof Error 
+      ? `Error: ${error.name}: ${error.message}` 
+      : "Unknown error occurred";
+    console.error("Detailed error:", errorMessage);
+    
+    return {
+      success: false,
+      error: "Error generating quiz. Please try again later."
+    };
+  }
+}

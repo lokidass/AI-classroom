@@ -7,10 +7,11 @@ import { z } from "zod";
 import { 
   insertClassroomSchema, insertLectureSchema, insertAssignmentSchema, 
   insertMaterialSchema, insertMessageSchema, insertLectureNoteSchema, 
-  insertClassroomMemberSchema, insertLectureRecordingSchema 
+  insertClassroomMemberSchema, insertLectureRecordingSchema,
+  insertQuizSchema, insertQuizQuestionSchema
 } from "@shared/schema";
 import { setupWebSockets } from "./websocket";
-import { testGeminiApi, listAvailableModels, answerQuestion } from "./gemini";
+import { testGeminiApi, listAvailableModels, answerQuestion, generateQuizFromContent } from "./gemini";
 import { nanoid } from "nanoid";
 
 function isAuthenticated(req: Express.Request, res: Express.Response, next: Express.NextFunction) {
@@ -502,6 +503,223 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const recordings = await storage.getLectureRecordings(lectureId);
       res.json(recordings);
+    } catch (err) {
+      next(err);
+    }
+  });
+  
+  // Quiz routes
+  app.post("/api/classrooms/:classroomId/quizzes", isTeacher, canAccessClassroom, async (req, res, next) => {
+    try {
+      const classroomId = parseInt(req.params.classroomId);
+      
+      const data = insertQuizSchema.parse({
+        ...req.body,
+        classroomId,
+        creatorId: req.user!.id,
+        contentSource: req.body.content || null
+      });
+      
+      const quiz = await storage.createQuiz(data);
+      
+      // If content is provided, generate questions using AI
+      if (req.body.content && typeof req.body.content === 'string') {
+        try {
+          // Generate quiz questions using Gemini
+          const generatedQuiz = await generateQuizFromContent(req.body.content);
+          
+          if (generatedQuiz && generatedQuiz.success && Array.isArray(generatedQuiz.questions)) {
+            // Store each question in the database
+            const savedQuestions = await Promise.all(
+              generatedQuiz.questions.map(async (question, index) => {
+                const questionData = {
+                  quizId: quiz.id,
+                  questionText: question.question,
+                  options: question.options,
+                  correctAnswer: question.options[question.correctOption], // Store the text of the correct answer
+                  explanation: question.explanation || null,
+                  order: index + 1 // Set the order based on the index
+                };
+                
+                return storage.createQuizQuestion(questionData);
+              })
+            );
+            
+            return res.status(201).json({
+              quiz,
+              questions: savedQuestions
+            });
+          }
+        } catch (aiError) {
+          console.error("Error generating quiz questions:", aiError);
+          // Continue and return the created quiz without questions
+        }
+      }
+      
+      res.status(201).json({ quiz, questions: [] });
+    } catch (err) {
+      next(err);
+    }
+  });
+  
+  app.get("/api/classrooms/:classroomId/quizzes", canAccessClassroom, async (req, res, next) => {
+    try {
+      const classroomId = parseInt(req.params.classroomId);
+      const quizzes = await storage.getQuizzesByClassroom(classroomId);
+      res.json(quizzes);
+    } catch (err) {
+      next(err);
+    }
+  });
+  
+  app.get("/api/quizzes/:quizId", isAuthenticated, async (req, res, next) => {
+    try {
+      const quizId = parseInt(req.params.quizId);
+      if (isNaN(quizId)) {
+        return res.status(400).json({ message: "Invalid quiz ID" });
+      }
+      
+      const quiz = await storage.getQuiz(quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+      
+      // Check if user has access to the quiz's classroom
+      const isUserInClassroom = await storage.isUserInClassroom(req.user!.id, quiz.classroomId);
+      if (!isUserInClassroom) {
+        return res.status(403).json({ message: "You don't have access to this quiz" });
+      }
+      
+      // Get questions for this quiz
+      const questions = await storage.getQuizQuestions(quizId);
+      
+      res.json({
+        quiz,
+        questions
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+  
+  app.post("/api/quizzes/:quizId/responses", isAuthenticated, async (req, res, next) => {
+    try {
+      const quizId = parseInt(req.params.quizId);
+      if (isNaN(quizId)) {
+        return res.status(400).json({ message: "Invalid quiz ID" });
+      }
+      
+      const quiz = await storage.getQuiz(quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz not found" });
+      }
+      
+      // Check if user has access to the quiz's classroom
+      const isUserInClassroom = await storage.isUserInClassroom(req.user!.id, quiz.classroomId);
+      if (!isUserInClassroom) {
+        return res.status(403).json({ message: "You don't have access to this quiz" });
+      }
+      
+      // Create quiz response
+      const quizResponse = await storage.createQuizResponse({
+        quizId,
+        userId: req.user!.id,
+        completed: false,
+        score: null,
+        completedAt: null
+      });
+      
+      res.status(201).json(quizResponse);
+    } catch (err) {
+      next(err);
+    }
+  });
+  
+  app.post("/api/quiz-responses/:responseId/submit", isAuthenticated, async (req, res, next) => {
+    try {
+      const responseId = parseInt(req.params.responseId);
+      if (isNaN(responseId)) {
+        return res.status(400).json({ message: "Invalid response ID" });
+      }
+      
+      const quizResponse = await storage.getQuizResponse(responseId);
+      if (!quizResponse) {
+        return res.status(404).json({ message: "Quiz response not found" });
+      }
+      
+      // Check if the user is the owner of this response
+      if (quizResponse.userId !== req.user!.id) {
+        return res.status(403).json({ message: "You don't have permission to submit this response" });
+      }
+      
+      // Validate the answers from the request body
+      const { answers } = req.body;
+      if (!answers || !Array.isArray(answers)) {
+        return res.status(400).json({ message: "Answers must be provided as an array" });
+      }
+      
+      // Get quiz questions
+      const questions = await storage.getQuizQuestions(quizResponse.quizId);
+      if (questions.length === 0) {
+        return res.status(400).json({ message: "This quiz has no questions" });
+      }
+      
+      // Store each answer
+      let correctAnswers = 0;
+      for (const answer of answers) {
+        const questionId = parseInt(answer.questionId);
+        const selectedOptionIndex = parseInt(answer.selectedOption);
+        
+        if (isNaN(questionId) || isNaN(selectedOptionIndex)) {
+          continue;
+        }
+        
+        // Find the question
+        const question = questions.find(q => q.id === questionId);
+        if (!question) {
+          continue;
+        }
+        
+        // Get the selected answer text based on the index (if options are available)
+        let userAnswer = "";
+        if (question.options && Array.isArray(question.options) && 
+            selectedOptionIndex >= 0 && selectedOptionIndex < question.options.length) {
+          userAnswer = question.options[selectedOptionIndex];
+        } else {
+          userAnswer = String(selectedOptionIndex); // Fallback to the index itself
+        }
+        
+        // Check if the answer is correct
+        const isCorrect = question.correctAnswer === userAnswer;
+        if (isCorrect) {
+          correctAnswers++;
+        }
+        
+        // Store the response
+        await storage.createQuestionResponse({
+          quizResponseId: responseId,
+          questionId,
+          userAnswer,
+          isCorrect
+        });
+      }
+      
+      // Calculate score as percentage
+      const score = questions.length > 0 ? (correctAnswers / questions.length) * 100 : 0;
+      
+      // Update the quiz response
+      const updatedResponse = await storage.updateQuizResponse(responseId, {
+        completed: true,
+        completedAt: new Date(),
+        score
+      });
+      
+      res.json({
+        response: updatedResponse,
+        correctAnswers,
+        totalQuestions: questions.length,
+        score
+      });
     } catch (err) {
       next(err);
     }

@@ -202,3 +202,88 @@ export type InsertMessage = z.infer<typeof insertMessageSchema>;
 // Define LectureRecording types
 export type LectureRecording = typeof lectureRecordings.$inferSelect;
 export type InsertLectureRecording = z.infer<typeof insertLectureRecordingSchema>;
+
+// Quiz tables
+export const quizzes = pgTable("quizzes", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  classroomId: integer("classroom_id").notNull().references(() => classrooms.id),
+  creatorId: integer("creator_id").notNull().references(() => users.id),
+  contentSource: text("content_source"), // File content or text used to generate the quiz
+  createdAt: timestamp("created_at").defaultNow(),
+  isActive: boolean("is_active").default(true),
+});
+
+export const insertQuizSchema = createInsertSchema(quizzes).pick({
+  title: true,
+  description: true,
+  classroomId: true,
+  creatorId: true,
+  contentSource: true,
+  isActive: true,
+});
+
+export const quizQuestions = pgTable("quiz_questions", {
+  id: serial("id").primaryKey(),
+  quizId: integer("quiz_id").notNull().references(() => quizzes.id),
+  questionText: text("question_text").notNull(),
+  options: text("options").array(), // Array of possible answers
+  correctAnswer: text("correct_answer").notNull(), // The correct answer
+  explanation: text("explanation"), // Explanation for the answer
+  order: integer("order").notNull(), // Order of questions
+});
+
+export const insertQuizQuestionSchema = createInsertSchema(quizQuestions).pick({
+  quizId: true,
+  questionText: true,
+  options: true,
+  correctAnswer: true,
+  explanation: true,
+  order: true,
+});
+
+export const quizResponses = pgTable("quiz_responses", {
+  id: serial("id").primaryKey(),
+  quizId: integer("quiz_id").notNull().references(() => quizzes.id),
+  userId: integer("user_id").notNull().references(() => users.id),
+  completed: boolean("completed").default(false),
+  score: integer("score"),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertQuizResponseSchema = createInsertSchema(quizResponses).pick({
+  quizId: true,
+  userId: true,
+  completed: true,
+  score: true,
+  completedAt: true,
+});
+
+export const questionResponses = pgTable("question_responses", {
+  id: serial("id").primaryKey(),
+  quizResponseId: integer("quiz_response_id").notNull().references(() => quizResponses.id),
+  questionId: integer("question_id").notNull().references(() => quizQuestions.id),
+  userAnswer: text("user_answer"),
+  isCorrect: boolean("is_correct"),
+});
+
+export const insertQuestionResponseSchema = createInsertSchema(questionResponses).pick({
+  quizResponseId: true,
+  questionId: true,
+  userAnswer: true,
+  isCorrect: true,
+});
+
+export type Quiz = typeof quizzes.$inferSelect;
+export type InsertQuiz = z.infer<typeof insertQuizSchema>;
+
+export type QuizQuestion = typeof quizQuestions.$inferSelect;
+export type InsertQuizQuestion = z.infer<typeof insertQuizQuestionSchema>;
+
+export type QuizResponse = typeof quizResponses.$inferSelect;
+export type InsertQuizResponse = z.infer<typeof insertQuizResponseSchema>;
+
+export type QuestionResponse = typeof questionResponses.$inferSelect;
+export type InsertQuestionResponse = z.infer<typeof insertQuestionResponseSchema>;

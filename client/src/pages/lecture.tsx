@@ -5,7 +5,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { Lecture, Classroom } from "@shared/schema";
 import { webSocketClient } from "@/lib/websocket";
 import Header from "@/components/layout/header";
-import BasicVideoChat from "@/components/lecture/basic-video-chat";
+import VideoInterface from "@/components/lecture/video-interface";
+import BasicVideoTest from "@/components/lecture/basic-video-test";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LiveNotes from "@/components/lecture/live-notes";
 import AIAssistant from "@/components/lecture/ai-assistant";
@@ -216,9 +217,9 @@ export default function LecturePage() {
       
       <div className="flex-1 overflow-y-auto bg-gray-50 p-4">
         <div className="max-w-7xl mx-auto">
-          {/* Lecture Header */}
+          {/* Lecture Container */}
           <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-2">
               <div>
                 <h2 className="text-xl font-medium text-gray-800">{lecture.title}</h2>
                 <p className="text-sm text-gray-500">
@@ -242,12 +243,10 @@ export default function LecturePage() {
                 )}
               </div>
             </div>
-          </div>
-          
-          {/* Video Chat Interface */}
-          <div className="mb-4">
-            <BasicVideoChat 
-              lectureId={lectureId}
+            
+            {/* Video Interface */}
+            <VideoInterface 
+              lectureId={lectureId} 
               isTeacher={isTeacher}
             />
           </div>

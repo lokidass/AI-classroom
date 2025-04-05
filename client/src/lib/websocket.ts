@@ -143,13 +143,10 @@ export class WebSocketClient {
 
   joinVideo() {
     if (this.socket?.readyState === READY_STATE.OPEN && this.lectureId) {
-      console.log(`%c[WebSocket] Joining video for lecture ${this.lectureId}`, 'background: #440; color: #ff0; padding: 2px 4px; border-radius: 2px');
       this.sendMessage({
         type: "join_video",
         payload: { lectureId: this.lectureId }
       });
-    } else {
-      console.error(`[WebSocket] Cannot join video: socket ready: ${this.socket?.readyState === READY_STATE.OPEN}, lectureId: ${this.lectureId}`);
     }
   }
 
@@ -171,13 +168,6 @@ export class WebSocketClient {
   }
 
   sendSignal(targetUserId: number, data: any) {
-    console.log(`%c[WebSocket] Sending signal to user ${targetUserId}`, 'background: #440; color: #ff0; padding: 2px 4px; border-radius: 2px', data);
-    
-    if (!this.userId) {
-      console.error(`[WebSocket] Cannot send signal: local userId is not set`);
-      return;
-    }
-    
     this.sendMessage({
       type: "signal",
       payload: {
@@ -259,13 +249,7 @@ export class WebSocketClient {
   }
 
   private emit(event: string, data: any) {
-    console.log(`%c[WebSocket] Emitting event: ${event}`, 'background: #440; color: #ff0; padding: 2px 4px; border-radius: 2px', data);
-    
     const listeners = this.eventListeners.get(event) || [];
-    if (listeners.length === 0) {
-      console.warn(`[WebSocket] No listeners for event: ${event}`);
-    }
-    
     listeners.forEach(callback => {
       try {
         callback(data);

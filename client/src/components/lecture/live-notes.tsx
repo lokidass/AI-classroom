@@ -67,14 +67,12 @@ export default function LiveNotes({ lectureId }: LiveNotesProps) {
   
   // Listen for transcription updates
   useEffect(() => {
-    const handleTranscription = (data: { text: string, isFinal?: boolean }) => {
-      // Only show generating indicator for final transcriptions
-      if (data.isFinal === true) {
-        setIsAIGenerating(true);
-        console.log("Received final transcription:", data.text);
-      } else {
-        console.log("Received interim transcription");
-      }
+    const handleTranscription = (data: { text: string }) => {
+      setIsAIGenerating(true);
+      
+      // Use the Gemini API on the server via WebSocket to generate notes from transcription
+      // This will be processed by the server and broadcast back as a lecture_note event
+      // The server will handle storing the notes in the database
     };
     
     const handleLectureNote = (data: any) => {

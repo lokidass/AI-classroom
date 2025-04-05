@@ -233,12 +233,34 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
       // Use the most basic constraint possible
       console.log("Requesting camera access with basic constraints...");
       
-      // Important: Use { video: true } only first to simplify the process
-      // Browser support for complex constraints can be unreliable
-      const newStream = await navigator.mediaDevices.getUserMedia({ 
-        video: true,
-        audio: true
-      });
+      let newStream;
+      
+      // First try video and audio together
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({ 
+          video: true,
+          audio: true
+        });
+        console.log("Successfully got both video and audio");
+      } catch (mediaError) {
+        console.warn("Could not get both video and audio:", mediaError);
+        
+        // If that fails, try just video
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia({ 
+            video: true 
+          });
+          console.log("Successfully got just video");
+        } catch (videoError) {
+          console.warn("Could not get video:", videoError);
+          
+          // If that fails too, try just audio
+          newStream = await navigator.mediaDevices.getUserMedia({ 
+            audio: true 
+          });
+          console.log("Successfully got just audio");
+        }
+      }
       
       console.log("Stream obtained successfully with", 
         newStream.getVideoTracks().length, "video tracks and",
@@ -260,43 +282,52 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
         videoTrack.enabled = true;
       }
       
+      // Force enable audio tracks too
+      if (newStream.getAudioTracks().length > 0) {
+        newStream.getAudioTracks().forEach(track => {
+          track.enabled = true;
+        });
+      }
+      
       // Set state immediately
       setStream(newStream);
       setAudioEnabled(newStream.getAudioTracks().length > 0);
       setVideoEnabled(newStream.getVideoTracks().length > 0);
       
-      // Handle the video element directly
-      if (localVideoRef.current) {
-        console.log("Setting srcObject on local video element");
-        
-        // Force clean any previous stream
-        if (localVideoRef.current.srcObject) {
-          console.log("Cleaning previous srcObject");
-          localVideoRef.current.srcObject = null;
-        }
-        
-        // Set the new stream
-        localVideoRef.current.srcObject = newStream;
-        
-        // Make sure autoplay and other attributes are set
-        localVideoRef.current.autoplay = true;
-        localVideoRef.current.playsInline = true;
-        localVideoRef.current.muted = true; // Mute local video to avoid feedback
-        
-        // Force play the video element (for iOS and some other browsers)
-        try {
-          const playPromise = localVideoRef.current.play();
-          if (playPromise !== undefined) {
-            playPromise
-              .then(() => console.log("Video playback started successfully"))
-              .catch(err => console.error("Error playing video:", err));
+      // Handle the video element directly - Add a small delay to ensure DOM is ready
+      setTimeout(() => {
+        if (localVideoRef.current) {
+          console.log("Setting srcObject on local video element");
+          
+          // Force clean any previous stream
+          if (localVideoRef.current.srcObject) {
+            console.log("Cleaning previous srcObject");
+            localVideoRef.current.srcObject = null;
           }
-        } catch (playError) {
-          console.error("Error calling play():", playError);
+          
+          // Set the new stream
+          localVideoRef.current.srcObject = newStream;
+          
+          // Make sure autoplay and other attributes are set
+          localVideoRef.current.autoplay = true;
+          localVideoRef.current.playsInline = true;
+          localVideoRef.current.muted = true; // Mute local video to avoid feedback
+          
+          // Force play the video element (for iOS and some other browsers)
+          try {
+            const playPromise = localVideoRef.current.play();
+            if (playPromise !== undefined) {
+              playPromise
+                .then(() => console.log("Video playback started successfully"))
+                .catch(err => console.error("Error playing video:", err));
+            }
+          } catch (playError) {
+            console.error("Error calling play():", playError);
+          }
+        } else {
+          console.error("Local video ref is null! Can't attach stream");
         }
-      } else {
-        console.error("Local video ref is null! Can't attach stream");
-      }
+      }, 100);
       
       // Join the WebSocket video room
       webSocketClient.joinVideo();
@@ -1029,16 +1060,40 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
   return (
     <div className="flex flex-col">
       <div className="video-container bg-black rounded-lg overflow-hidden mb-4" ref={containerRef}>
-        <div className="relative w-full h-full flex items-center justify-center">
-          {!stream || !videoEnabled ? (
-            <div className="text-center text-white">
+        <div className="relative w-full h-full flex items-center justify-center" style={{ minHeight: '300px' }}>
+          {!stream ? (
+            <div className="text-center text-white p-8">
               <VideoOff className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p className="text-lg font-medium">
-                {isTeacher ? "Your camera is off" : "Waiting for video..."}
+                {isTeacher ? "Your video is not active" : "Waiting for video..."}
               </p>
+              <p className="text-sm opacity-70 mb-4">
+                {isTeacher ? "Click the Start Video button below to begin" : "The presenter hasn't started video yet"}
+              </p>
+              {isTeacher && (
+                <Button onClick={joinVideoCall} className="mx-auto">
+                  Start Video
+                </Button>
+              )}
+            </div>
+          ) : !videoEnabled ? (
+            <div className="text-center text-white">
+              <VideoOff className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p className="text-lg font-medium">Your camera is turned off</p>
               <p className="text-sm opacity-70">
-                {isTeacher ? "Click the camera button below to turn it on" : "The presenter hasn't started video yet"}
+                Click the camera button below to turn it on
               </p>
+              {/* Show the stream anyway since audio might be working */}
+              <video
+                ref={localVideoRef}
+                autoPlay={true}
+                playsInline={true}
+                muted={true}
+                controls={false}
+                className="hidden"
+              >
+                Your browser does not support video playback.
+              </video>
             </div>
           ) : (
             <video
@@ -1064,6 +1119,7 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
                   className="w-32 h-20 bg-gray-800 rounded overflow-hidden border border-gray-700"
                 >
                   <video
+                    key={`video-${peerId}`}
                     ref={el => remoteVideoRefs.current[peerId] = el}
                     autoPlay={true}
                     playsInline={true}

@@ -360,7 +360,7 @@ export async function generateQuizFromContent(content: string, numQuestions: num
           } else {
             // If it's not a valid number, find the index of the correct answer in options
             const optionIndex = q.options.findIndex(
-              opt => opt.toLowerCase() === correctOption.toLowerCase()
+              (opt: string) => opt.toLowerCase() === correctOption.toLowerCase()
             );
             correctOption = optionIndex >= 0 ? optionIndex : 0;
           }

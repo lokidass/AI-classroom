@@ -4,10 +4,10 @@ import Header from "@/components/layout/header";
 import Sidebar from "@/components/layout/sidebar";
 import { Button } from "@/components/ui/button";
 import { useParams, useLocation } from "wouter";
-import { Classroom, Assignment, Material, Lecture } from "@shared/schema";
+import { Classroom, Assignment, Material, Lecture, Quiz, QuizQuestion } from "@shared/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Calendar, FileText, Video, Plus, Upload } from "lucide-react";
+import { Loader2, Calendar, FileText, Video, Plus, Upload, BookOpen, ClipboardCheck, BookText as QuizIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
@@ -34,6 +34,8 @@ export default function ClassroomPage() {
   const [activeTab, setActiveTab] = useState("stream");
   const [isAddAssignmentOpen, setIsAddAssignmentOpen] = useState(false);
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
+  const [isCreateQuizOpen, setIsCreateQuizOpen] = useState(false);
+  const [isGenerateQuizOpen, setIsGenerateQuizOpen] = useState(false);
   
   const classroomId = id ? parseInt(id) : 0;
   
@@ -92,6 +94,15 @@ export default function ClassroomPage() {
     isLoading: isLoadingMembers
   } = useQuery<ClassroomMember[]>({
     queryKey: [`/api/classrooms/${classroomId}/members`],
+    enabled: !!classroomId,
+  });
+  
+  // Fetch quizzes
+  const {
+    data: quizzes,
+    isLoading: isLoadingQuizzes
+  } = useQuery<Quiz[]>({
+    queryKey: [`/api/classrooms/${classroomId}/quizzes`],
     enabled: !!classroomId,
   });
   
@@ -165,6 +176,41 @@ export default function ClassroomPage() {
     },
   });
   
+  // Quiz schema
+  const quizSchema = z.object({
+    title: z.string().min(1, "Title is required"),
+    description: z.string().optional(),
+    timeLimit: z.string().optional(),
+  });
+  
+  const quizForm = useForm<z.infer<typeof quizSchema>>({
+    resolver: zodResolver(quizSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      timeLimit: "",
+    },
+  });
+  
+  // Quiz generation schema
+  const quizGenerationSchema = z.object({
+    title: z.string().min(1, "Title is required"),
+    content: z.string().min(10, "Content must be at least 10 characters long"),
+    numQuestions: z.preprocess(
+      (val) => Number(val),
+      z.number().min(1, "Number of questions must be at least 1").max(20, "Number of questions must be at most 20")
+    ),
+  });
+  
+  const quizGenerationForm = useForm<z.infer<typeof quizGenerationSchema>>({
+    resolver: zodResolver(quizGenerationSchema),
+    defaultValues: {
+      title: "",
+      content: "",
+      numQuestions: 10,
+    },
+  });
+  
   // Create assignment mutation
   const createAssignmentMutation = useMutation({
     mutationFn: async (data: z.infer<typeof assignmentSchema>) => {
@@ -225,6 +271,68 @@ export default function ClassroomPage() {
   
   const onMaterialSubmit = (data: z.infer<typeof materialSchema>) => {
     createMaterialMutation.mutate(data);
+  };
+  
+  // Create quiz mutation
+  const createQuizMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof quizSchema>) => {
+      return await apiRequest(
+        "POST", 
+        `/api/classrooms/${classroomId}/quizzes`, 
+        data
+      );
+    },
+    onSuccess: () => {
+      toast({
+        title: "Quiz created",
+        description: "Your quiz has been created successfully.",
+      });
+      setIsCreateQuizOpen(false);
+      quizForm.reset();
+      queryClient.invalidateQueries({ queryKey: [`/api/classrooms/${classroomId}/quizzes`] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to create quiz",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Generate quiz mutation
+  const generateQuizMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof quizGenerationSchema>) => {
+      return await apiRequest(
+        "POST", 
+        `/api/classrooms/${classroomId}/quizzes/generate`, 
+        data
+      );
+    },
+    onSuccess: () => {
+      toast({
+        title: "Quiz generated",
+        description: "Your quiz has been generated successfully using AI.",
+      });
+      setIsGenerateQuizOpen(false);
+      quizGenerationForm.reset();
+      queryClient.invalidateQueries({ queryKey: [`/api/classrooms/${classroomId}/quizzes`] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to generate quiz",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const onQuizSubmit = (data: z.infer<typeof quizSchema>) => {
+    createQuizMutation.mutate(data);
+  };
+  
+  const onQuizGenerationSubmit = (data: z.infer<typeof quizGenerationSchema>) => {
+    generateQuizMutation.mutate(data);
   };
   
   // Loading state
@@ -310,6 +418,7 @@ export default function ClassroomPage() {
                 <TabsTrigger value="stream">Stream</TabsTrigger>
                 <TabsTrigger value="assignments">Assignments</TabsTrigger>
                 <TabsTrigger value="materials">Materials</TabsTrigger>
+                <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
                 <TabsTrigger value="people">People</TabsTrigger>
               </TabsList>
               
@@ -491,6 +600,94 @@ export default function ClassroomPage() {
                           <Upload className="h-4 w-4 mr-2" />
                           Add Material
                         </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+              
+              <TabsContent value="quizzes">
+                <div className="flex justify-between mb-4">
+                  <h2 className="text-xl font-semibold">Quizzes</h2>
+                  {user?.role === "teacher" && (
+                    <div className="space-x-2">
+                      <Button 
+                        onClick={() => setIsGenerateQuizOpen(true)}
+                        variant="outline"
+                      >
+                        <QuizIcon className="h-4 w-4 mr-2" />
+                        Generate Quiz with AI
+                      </Button>
+                      <Button onClick={() => setIsCreateQuizOpen(true)}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create Quiz
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                
+                {isLoadingQuizzes ? (
+                  <div className="flex items-center justify-center p-16">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : quizzes && quizzes.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {quizzes.map((quiz) => (
+                      <Card key={quiz.id} className="flex flex-col">
+                        <CardHeader>
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <CardTitle>{quiz.title}</CardTitle>
+                              <CardDescription>
+                                {quiz.createdAt ? format(new Date(quiz.createdAt), "MMM d, yyyy") : "Date not available"}
+                              </CardDescription>
+                            </div>
+                            {quiz.isActive === true && (
+                              <div className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                                Active
+                              </div>
+                            )}
+                          </div>
+                        </CardHeader>
+                        <CardContent className="flex-1">
+                          <p className="text-sm text-gray-600 mb-4">
+                            {quiz.description || "No description provided."}
+                          </p>
+                        </CardContent>
+                        <div className="p-4 pt-0 mt-auto">
+                          <Button variant="outline" className="w-full mb-2">
+                            View Quiz
+                          </Button>
+                          {user?.role === "teacher" && (
+                            <Button variant="outline" className="w-full" disabled={quiz.isActive === true}>
+                              {quiz.isActive === true ? "Quiz is Active" : "Activate Quiz"}
+                            </Button>
+                          )}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <Card>
+                    <CardContent className="p-8 text-center">
+                      <BookOpen className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                      <h3 className="text-lg font-medium mb-2">No Quizzes Yet</h3>
+                      <p className="text-gray-500 mb-4">
+                        {user?.role === "teacher"
+                          ? "Create your first quiz to get started. You can manually create a quiz or use AI to generate one from your content."
+                          : "There are no quizzes in this class yet."}
+                      </p>
+                      {user?.role === "teacher" && (
+                        <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                          <Button onClick={() => setIsGenerateQuizOpen(true)} variant="outline">
+                            <QuizIcon className="h-4 w-4 mr-2" />
+                            Generate Quiz with AI
+                          </Button>
+                          <Button onClick={() => setIsCreateQuizOpen(true)}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create Quiz
+                          </Button>
+                        </div>
                       )}
                     </CardContent>
                   </Card>
@@ -748,6 +945,201 @@ export default function ClassroomPage() {
                     </>
                   ) : (
                     "Add Material"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Create Quiz Dialog */}
+      <Dialog open={isCreateQuizOpen} onOpenChange={setIsCreateQuizOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Quiz</DialogTitle>
+            <DialogDescription>
+              Create a new quiz for your class.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Form {...quizForm}>
+            <form onSubmit={quizForm.handleSubmit(onQuizSubmit)}>
+              <div className="space-y-4">
+                <FormField
+                  control={quizForm.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Title</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Quiz title" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={quizForm.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          placeholder="Provide details about the quiz"
+                          rows={3}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={quizForm.control}
+                  name="timeLimit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Time Limit (minutes)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder="e.g., 30"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <DialogFooter className="mt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsCreateQuizOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createQuizMutation.isPending}
+                >
+                  {createQuizMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Quiz"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Generate Quiz Dialog */}
+      <Dialog open={isGenerateQuizOpen} onOpenChange={setIsGenerateQuizOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Generate Quiz with AI</DialogTitle>
+            <DialogDescription>
+              Generate a quiz automatically using AI based on your content.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Form {...quizGenerationForm}>
+            <form onSubmit={quizGenerationForm.handleSubmit(onQuizGenerationSubmit)}>
+              <div className="space-y-4">
+                <FormField
+                  control={quizGenerationForm.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Quiz Title</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter quiz title" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={quizGenerationForm.control}
+                  name="content"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Content to Generate Quiz From</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          placeholder="Paste the lecture notes, material content, or text you want to generate a quiz from..."
+                          rows={8}
+                          className="font-mono text-sm"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={quizGenerationForm.control}
+                  name="numQuestions"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Number of Questions</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          min={1}
+                          max={20}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <div className="bg-amber-50 p-4 rounded-md mt-4">
+                <h4 className="text-amber-800 font-medium flex items-center">
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  Note
+                </h4>
+                <p className="text-amber-700 text-sm mt-1">
+                  Quiz generation uses Google's Gemini AI to create questions based on your content. The process may take 
+                  a few moments depending on the length of your content and the number of questions requested.
+                </p>
+              </div>
+              
+              <DialogFooter className="mt-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsGenerateQuizOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={generateQuizMutation.isPending}
+                >
+                  {generateQuizMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Generating Quiz...
+                    </>
+                  ) : (
+                    "Generate Quiz"
                   )}
                 </Button>
               </DialogFooter>

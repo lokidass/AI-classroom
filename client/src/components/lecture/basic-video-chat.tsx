@@ -38,57 +38,86 @@ export default function BasicVideoChat({ lectureId, isTeacher = false }: BasicVi
   const [remoteUsers, setRemoteUsers] = useState<{id: number, name: string}[]>([]);
   const [initialized, setInitialized] = useState(false);
   
-  // Logger function
+  // Logger function with enhanced visibility
   const log = (message: string) => {
-    console.log(`[BasicVideoChat] ${message}`);
+    console.log(`%c[BasicVideoChat] ${message}`, 'background: #222; color: #bada55; padding: 2px 4px; border-radius: 2px');
   };
   
-  // Initialize WebSocket and media
+  // Register WebSocket event handlers
+  useEffect(() => {
+    log(`Setting up WebSocket event handlers`);
+    
+    // Register all event handlers first
+    webSocketClient.on('peer_joined', handlePeerJoined);
+    webSocketClient.on('peer_left', handlePeerLeft);
+    webSocketClient.on('signal', handleSignal);
+    webSocketClient.on('peers_in_lecture', handlePeersInLecture);
+    
+    return () => {
+      // Clean up all event handlers
+      log('Removing WebSocket event handlers');
+      webSocketClient.off('peer_joined', handlePeerJoined);
+      webSocketClient.off('peer_left', handlePeerLeft);
+      webSocketClient.off('signal', handleSignal);
+      webSocketClient.off('peers_in_lecture', handlePeersInLecture);
+    };
+  }, []); // This only needs to run once
+  
+  // Initialize media and join video room
   useEffect(() => {
     log(`Initializing for lecture ${lectureId}`);
     
-    // Import SimplePeer dynamically
-    const loadDependencies = async () => {
+    const initializeVideoChat = async () => {
       try {
-        // Set up WebSocket event handlers
-        webSocketClient.on('peer_joined', handlePeerJoined);
-        webSocketClient.on('peer_left', handlePeerLeft);
-        webSocketClient.on('signal', handleSignal);
-        webSocketClient.on('peers_in_lecture', handlePeersInLecture);
+        // Check if SimplePeer is available
+        if (!(window as any).SimplePeer) {
+          log('SimplePeer not available yet, will retry in 1 second');
+          setTimeout(initializeVideoChat, 1000);
+          return;
+        }
         
-        // Join video room
+        // Start media first to get access to camera/mic
+        const stream = await startLocalStream();
+        if (!stream) {
+          throw new Error('Failed to get local media stream');
+        }
+        
+        // Then join the video room, which will trigger connection with other peers
         webSocketClient.joinVideo();
-        log('Joined video room');
+        log('Joined video room with userId: ' + webSocketClient.userId);
         
-        // Start media
-        await startLocalStream();
         setInitialized(true);
       } catch (error) {
         log(`Error initializing: ${(error as Error).message}`);
+        toast({
+          title: 'Initialization Error',
+          description: `${(error as Error).message}. Try refreshing the page.`,
+          variant: 'destructive'
+        });
       }
     };
     
-    loadDependencies();
+    initializeVideoChat();
     
-    // Cleanup on unmount
+    // Cleanup on unmount or lecture change
     return () => {
-      stopLocalStream();
+      log(`Cleaning up for lecture ${lectureId}`);
       
-      // Close all peer connections
+      // Leave video room first
+      webSocketClient.leaveVideo();
+      log('Left video room');
+      
+      // Then close all peer connections
       peers.current.forEach(peer => {
         peer.destroy();
       });
       peers.current.clear();
       
-      // Remove event handlers
-      webSocketClient.off('peer_joined', handlePeerJoined);
-      webSocketClient.off('peer_left', handlePeerLeft);
-      webSocketClient.off('signal', handleSignal);
-      webSocketClient.off('peers_in_lecture', handlePeersInLecture);
+      // Finally stop local media
+      stopLocalStream();
       
-      // Leave video room
-      webSocketClient.leaveVideo();
-      log('Left video room');
+      setRemoteUsers([]);
+      setInitialized(false);
     };
   }, [lectureId]);
   

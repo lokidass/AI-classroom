@@ -1,88 +1,77 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Mic, MicOff, Video, VideoOff, RefreshCcw, Users } from "lucide-react";
-import { webSocketClient } from "@/lib/websocket";
+import { Mic, MicOff, Video, VideoOff, RefreshCcw } from "lucide-react";
 
-interface EnhancedVideoInterfaceProps {
-  lectureId: number;
-  isTeacher?: boolean;
-}
-
-export default function EnhancedVideoInterface({ lectureId, isTeacher = false }: EnhancedVideoInterfaceProps) {
+export default function SimpleVideoTest() {
   const { toast } = useToast();
   
   // State
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(false);
-  const [participants, setParticipants] = useState<{id: number, name: string}[]>([]);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [logs, setLogs] = useState<string[]>([]);
   
   // Refs
-  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   
   // Add a log message
   const addLog = (message: string) => {
-    console.log(`[EnhancedVideoInterface] ${message}`);
+    console.log(`[SimpleVideoTest] ${message}`);
+    setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
   };
   
-  // Initialize media
-  useEffect(() => {
-    startLocalStream();
-    
-    // Setup WebSocket event listeners for participants
-    webSocketClient.on("participant_joined", (data) => {
-      addLog(`Participant joined: ${JSON.stringify(data)}`);
-      setParticipants(prev => {
-        // Check if participant already exists
-        if (prev.find(p => p.id === data.userId)) {
-          return prev;
-        }
-        return [...prev, { id: data.userId, name: data.userName || `User ${data.userId}` }];
+  // Get available devices
+  const getDevices = async () => {
+    try {
+      addLog("Enumerating devices...");
+      const deviceList = await navigator.mediaDevices.enumerateDevices();
+      setDevices(deviceList);
+      
+      const audioInputs = deviceList.filter(d => d.kind === 'audioinput');
+      const videoInputs = deviceList.filter(d => d.kind === 'videoinput');
+      
+      addLog(`Found ${audioInputs.length} audio inputs and ${videoInputs.length} video inputs`);
+      
+      // Log device details
+      deviceList.forEach((device, index) => {
+        addLog(`Device ${index+1}: ${device.kind}, ${device.label || 'No label'}`);
       });
-    });
-    
-    webSocketClient.on("participant_left", (data) => {
-      addLog(`Participant left: ${JSON.stringify(data)}`);
-      setParticipants(prev => prev.filter(p => p.id !== data.userId));
-    });
-    
-    // Fetch initial participants
-    if (webSocketClient) {
-      // Using the message method from websocket client
-      webSocketClient.sendMessage({
-        type: "get_participants",
-        payload: { lectureId }
-      });
+    } catch (error) {
+      addLog(`Error getting devices: ${(error as Error).message}`);
     }
+  };
+  
+  // Initialize
+  useEffect(() => {
+    addLog("Component mounted");
+    getDevices();
     
-    webSocketClient.on("participants_list", (data) => {
-      addLog(`Received participants list: ${JSON.stringify(data)}`);
-      if (data.lectureId === lectureId) {
-        setParticipants(data.participants || []);
-      }
-    });
+    // Add device change listener
+    navigator.mediaDevices.addEventListener('devicechange', getDevices);
     
     return () => {
       // Cleanup
-      if (localStream) {
-        stopLocalStream();
+      if (stream) {
+        stopStream();
       }
+      navigator.mediaDevices.removeEventListener('devicechange', getDevices);
     };
-  }, [lectureId]);
+  }, []);
   
-  // Start local stream
-  const startLocalStream = async () => {
+  // Start video/audio
+  const startStream = async () => {
     try {
       addLog("Requesting media access...");
       
       // Stop any existing stream
-      if (localStream) {
-        stopLocalStream();
+      if (stream) {
+        stopStream();
       }
       
-      // Setup constraints
+      // Setup constraints - start with just audio to make it easier
       const constraints: MediaStreamConstraints = {
         audio: true,
         video: {
@@ -107,17 +96,13 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
         } catch (audioErr) {
           // If that fails, try just video
           addLog(`Error getting audio: ${(audioErr as Error).message}, trying video only`);
-          try {
-            mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            addLog("Successfully got just video");
-          } catch (videoErr) {
-            throw new Error("Could not access any media devices");
-          }
+          mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          addLog("Successfully got just video");
         }
       }
       
       // Update state
-      setLocalStream(mediaStream);
+      setStream(mediaStream);
       setAudioEnabled(mediaStream.getAudioTracks().length > 0);
       setVideoEnabled(mediaStream.getVideoTracks().length > 0);
       
@@ -127,12 +112,12 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
       });
       
       // Connect to video element
-      if (localVideoRef.current) {
+      if (videoRef.current) {
         addLog("Attaching stream to video element");
-        localVideoRef.current.srcObject = mediaStream;
+        videoRef.current.srcObject = mediaStream;
         
         try {
-          await localVideoRef.current.play();
+          await videoRef.current.play();
           addLog("Video playback started");
         } catch (playErr) {
           addLog(`Error playing video: ${(playErr as Error).message}`);
@@ -146,6 +131,9 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
         addLog("Video element reference is null");
       }
       
+      // Refresh device list to get labels
+      getDevices();
+      
     } catch (error) {
       addLog(`Error accessing media: ${(error as Error).message}`);
       toast({
@@ -156,22 +144,22 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
     }
   };
   
-  // Stop local stream
-  const stopLocalStream = () => {
-    if (localStream) {
+  // Stop stream
+  const stopStream = () => {
+    if (stream) {
       addLog("Stopping all tracks");
-      localStream.getTracks().forEach(track => {
+      stream.getTracks().forEach(track => {
         track.stop();
         addLog(`Stopped ${track.kind} track`);
       });
       
       // Clean up video element
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = null;
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
       }
       
       // Update state
-      setLocalStream(null);
+      setStream(null);
       setAudioEnabled(false);
       setVideoEnabled(false);
     }
@@ -179,8 +167,8 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
   
   // Toggle audio
   const toggleAudio = () => {
-    if (localStream) {
-      const tracks = localStream.getAudioTracks();
+    if (stream) {
+      const tracks = stream.getAudioTracks();
       const newEnabled = !audioEnabled;
       
       tracks.forEach(track => {
@@ -196,8 +184,8 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
   
   // Toggle video
   const toggleVideo = () => {
-    if (localStream) {
-      const tracks = localStream.getVideoTracks();
+    if (stream) {
+      const tracks = stream.getVideoTracks();
       const newEnabled = !videoEnabled;
       
       tracks.forEach(track => {
@@ -212,13 +200,17 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
   };
   
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {/* Local video */}
-      <div className="md:col-span-2">
+    <div className="container mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-6">Simple Video Test</h1>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
-          <CardContent className="p-4">
+          <CardHeader>
+            <CardTitle>Video Preview</CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="relative aspect-video bg-slate-800 rounded-lg overflow-hidden flex items-center justify-center mb-4">
-              {!localStream || !videoEnabled ? (
+              {!stream || !videoEnabled ? (
                 <div className="text-center text-white p-4">
                   <VideoOff className="h-12 w-12 mx-auto mb-2 opacity-50" />
                   <p className="text-lg font-medium">Camera is off</p>
@@ -226,7 +218,7 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
                 </div>
               ) : (
                 <video
-                  ref={localVideoRef}
+                  ref={videoRef}
                   className="w-full h-full object-cover"
                   autoPlay
                   playsInline
@@ -242,7 +234,7 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
                   variant={audioEnabled ? "default" : "outline"}
                   size="icon"
                   onClick={toggleAudio}
-                  disabled={!localStream || localStream.getAudioTracks().length === 0}
+                  disabled={!stream || stream.getAudioTracks().length === 0}
                 >
                   {audioEnabled ? <Mic /> : <MicOff />}
                 </Button>
@@ -251,7 +243,7 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
                   variant={videoEnabled ? "default" : "outline"}
                   size="icon"
                   onClick={toggleVideo}
-                  disabled={!localStream || localStream.getVideoTracks().length === 0}
+                  disabled={!stream || stream.getVideoTracks().length === 0}
                 >
                   {videoEnabled ? <Video /> : <VideoOff />}
                 </Button>
@@ -261,53 +253,52 @@ export default function EnhancedVideoInterface({ lectureId, isTeacher = false }:
                 <Button 
                   variant="outline"
                   size="sm"
-                  onClick={startLocalStream}
+                  onClick={getDevices}
                 >
                   <RefreshCcw className="h-4 w-4 mr-2" />
-                  Restart Media
+                  Refresh Devices
                 </Button>
+                
+                {!stream ? (
+                  <Button onClick={startStream}>Start Media</Button>
+                ) : (
+                  <Button variant="destructive" onClick={stopStream}>Stop Media</Button>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
-      </div>
-      
-      {/* Participants List */}
-      <div>
+        
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium flex items-center">
-                <Users className="h-5 w-5 mr-2" />
-                Participants
-              </h3>
-              <span className="bg-primary/10 text-primary px-2 py-1 rounded-full text-xs font-medium">
-                {participants.length}
-              </span>
+          <CardHeader>
+            <CardTitle>Debug Info</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4">
+              <h3 className="text-sm font-medium mb-2">Detected Devices ({devices.length})</h3>
+              <ul className="text-sm space-y-1 mb-4">
+                {devices.length === 0 ? (
+                  <li className="text-gray-500">No devices detected</li>
+                ) : (
+                  devices.map((device, i) => (
+                    <li key={i} className="text-gray-600 dark:text-gray-400">
+                      {device.kind}: {device.label || `Device ${i+1}`}
+                    </li>
+                  ))
+                )}
+              </ul>
             </div>
             
-            {participants.length === 0 ? (
-              <p className="text-sm text-gray-500">No participants yet</p>
-            ) : (
-              <ul className="space-y-2">
-                {participants.map((participant) => (
-                  <li 
-                    key={participant.id} 
-                    className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center mr-3">
-                      {participant.name[0]}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{participant.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {isTeacher && participant.id === -1 ? "Teacher" : "Student"}
-                      </p>
-                    </div>
-                  </li>
+            <div>
+              <h3 className="text-sm font-medium mb-2">Log</h3>
+              <div className="bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs font-mono h-48 overflow-y-auto">
+                {logs.map((log, i) => (
+                  <div key={i} className="whitespace-pre-wrap mb-1">
+                    {log}
+                  </div>
                 ))}
-              </ul>
-            )}
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

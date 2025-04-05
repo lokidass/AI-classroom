@@ -5,8 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Lecture, Classroom } from "@shared/schema";
 import { webSocketClient } from "@/lib/websocket";
 import Header from "@/components/layout/header";
-import VideoInterface from "@/components/lecture/video-interface";
-import BasicVideoTest from "@/components/lecture/basic-video-test";
+import EnhancedVideoInterface from "@/components/lecture/enhanced-video-interface";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LiveNotes from "@/components/lecture/live-notes";
 import AIAssistant from "@/components/lecture/ai-assistant";
@@ -244,11 +243,13 @@ export default function LecturePage() {
               </div>
             </div>
             
-            {/* Video Interface */}
-            <VideoInterface 
-              lectureId={lectureId} 
-              isTeacher={isTeacher}
-            />
+            {/* Enhanced Video Interface */}
+            <div className="mb-4">
+              <EnhancedVideoInterface 
+                lectureId={lectureId}
+                isTeacher={isTeacher}
+              />
+            </div>
           </div>
           
           {/* Tab Interface */}

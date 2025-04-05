@@ -383,8 +383,17 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
       // Create a new peer connection (initiator)
       const peer = new Peer({
         initiator: true,
-        trickle: false,
-        stream: stream || undefined
+        trickle: true, // Enable trickle ICE for better connection establishment
+        stream: stream || undefined,
+        config: {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+            { urls: "stun:stun3.l.google.com:19302" },
+            { urls: "stun:stun4.l.google.com:19302" }
+          ]
+        }
       });
       
       // Handle signals
@@ -395,7 +404,34 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
       // Handle stream
       peer.on('stream', (remoteStream) => {
         if (remoteVideoRefs.current[peerId]) {
-          remoteVideoRefs.current[peerId]!.srcObject = remoteStream;
+          const videoEl = remoteVideoRefs.current[peerId]!;
+          videoEl.srcObject = remoteStream;
+          
+          // Ensure proper video element properties
+          videoEl.autoplay = true;
+          videoEl.playsInline = true;
+          
+          // Try to start playback
+          try {
+            const playPromise = videoEl.play();
+            if (playPromise !== undefined) {
+              playPromise.catch(err => {
+                console.error(`Error playing remote video for peer ${peerId}:`, err);
+                // Retry playback after a short delay
+                setTimeout(() => {
+                  try {
+                    videoEl.play();
+                  } catch (e) {
+                    console.error("Retry playback also failed:", e);
+                  }
+                }, 1000);
+              });
+            }
+          } catch (e) {
+            console.error("Error while trying to play remote video:", e);
+          }
+        } else {
+          console.error(`No video element found for peer ${peerId} to attach stream to`);
         }
       });
       
@@ -441,8 +477,17 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
         // Create a new peer connection (non-initiator)
         const peer = new Peer({
           initiator: false,
-          trickle: false,
-          stream: stream || undefined
+          trickle: true, // Enable trickle ICE for better connection establishment
+          stream: stream || undefined,
+          config: {
+            iceServers: [
+              { urls: "stun:stun.l.google.com:19302" },
+              { urls: "stun:stun1.l.google.com:19302" },
+              { urls: "stun:stun2.l.google.com:19302" },
+              { urls: "stun:stun3.l.google.com:19302" },
+              { urls: "stun:stun4.l.google.com:19302" }
+            ]
+          }
         });
         
         // Handle signals
@@ -453,7 +498,34 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
         // Handle stream
         peer.on('stream', (remoteStream) => {
           if (remoteVideoRefs.current[peerId]) {
-            remoteVideoRefs.current[peerId]!.srcObject = remoteStream;
+            const videoEl = remoteVideoRefs.current[peerId]!;
+            videoEl.srcObject = remoteStream;
+            
+            // Ensure proper video element properties
+            videoEl.autoplay = true;
+            videoEl.playsInline = true;
+            
+            // Try to start playback
+            try {
+              const playPromise = videoEl.play();
+              if (playPromise !== undefined) {
+                playPromise.catch(err => {
+                  console.error(`Error playing remote video for peer ${peerId}:`, err);
+                  // Retry playback after a short delay
+                  setTimeout(() => {
+                    try {
+                      videoEl.play();
+                    } catch (e) {
+                      console.error("Retry playback also failed:", e);
+                    }
+                  }, 1000);
+                });
+              }
+            } catch (e) {
+              console.error("Error while trying to play remote video:", e);
+            }
+          } else {
+            console.error(`No video element found for peer ${peerId} to attach stream to`);
           }
         });
         

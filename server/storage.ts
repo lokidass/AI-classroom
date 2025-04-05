@@ -74,6 +74,7 @@ export interface IStorage {
   getQuiz(id: number): Promise<Quiz | undefined>;
   getQuizzesByClassroom(classroomId: number): Promise<Quiz[]>;
   getActiveQuizzesByClassroom(classroomId: number): Promise<Quiz[]>;
+  deleteQuiz(id: number): Promise<boolean>;
   
   // Quiz question operations
   createQuizQuestion(question: InsertQuizQuestion): Promise<QuizQuestion>;
@@ -477,6 +478,17 @@ export class MemStorage implements IStorage {
         const bTime = b.createdAt?.getTime() || 0;
         return bTime - aTime; // newest first
       });
+  }
+  
+  async deleteQuiz(id: number): Promise<boolean> {
+    // Delete all questions associated with this quiz first
+    const questions = await this.getQuizQuestions(id);
+    questions.forEach(question => {
+      this.quizQuestions.delete(question.id);
+    });
+    
+    // Delete the quiz
+    return this.quizzes.delete(id);
   }
   
   // Quiz question operations

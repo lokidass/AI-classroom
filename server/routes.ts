@@ -522,41 +522,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const quiz = await storage.createQuiz(data);
       
-      // If content is provided, generate questions using AI
-      if (req.body.content && typeof req.body.content === 'string') {
-        try {
-          // Generate quiz questions using Gemini
-          const generatedQuiz = await generateQuizFromContent(req.body.content);
-          
-          if (generatedQuiz && generatedQuiz.success && Array.isArray(generatedQuiz.questions)) {
-            // Store each question in the database
-            const savedQuestions = await Promise.all(
-              generatedQuiz.questions.map(async (question, index) => {
-                const questionData = {
-                  quizId: quiz.id,
-                  questionText: question.question,
-                  options: question.options,
-                  correctAnswer: question.options[question.correctOption], // Store the text of the correct answer
-                  explanation: question.explanation || null,
-                  order: index + 1 // Set the order based on the index
-                };
-                
-                return storage.createQuizQuestion(questionData);
-              })
-            );
-            
-            return res.status(201).json({
-              quiz,
-              questions: savedQuestions
-            });
-          }
-        } catch (aiError) {
-          console.error("Error generating quiz questions:", aiError);
-          // Continue and return the created quiz without questions
-        }
+      res.status(201).json({ quiz, questions: [] });
+    } catch (err) {
+      next(err);
+    }
+  });
+  
+  // Separate endpoint for AI-generated quizzes
+  app.post("/api/classrooms/:classroomId/quizzes/generate", isTeacher, canAccessClassroom, async (req, res, next) => {
+    try {
+      const classroomId = parseInt(req.params.classroomId);
+      
+      // Validate the request data
+      if (!req.body.content || typeof req.body.content !== 'string') {
+        return res.status(400).json({ message: "Content is required for quiz generation" });
       }
       
-      res.status(201).json({ quiz, questions: [] });
+      // Create the quiz first
+      const data = insertQuizSchema.parse({
+        title: req.body.title,
+        description: req.body.description || `AI-generated quiz from content`,
+        classroomId,
+        creatorId: req.user!.id,
+        contentSource: req.body.content
+      });
+      
+      const quiz = await storage.createQuiz(data);
+      
+      try {
+        // Generate quiz questions using Gemini
+        const numQuestions = req.body.numQuestions || 10;
+        const generatedQuiz = await generateQuizFromContent(req.body.content, numQuestions);
+        
+        if (generatedQuiz && generatedQuiz.success && Array.isArray(generatedQuiz.questions)) {
+          // Store each question in the database
+          const savedQuestions = await Promise.all(
+            generatedQuiz.questions.map(async (question, index) => {
+              const questionData = {
+                quizId: quiz.id,
+                questionText: question.question,
+                options: question.options,
+                correctAnswer: question.options[question.correctOption], // Store the text of the correct answer
+                explanation: question.explanation || null,
+                order: index + 1 // Set the order based on the index
+              };
+              
+              return storage.createQuizQuestion(questionData);
+            })
+          );
+          
+          return res.status(201).json({
+            quiz,
+            questions: savedQuestions
+          });
+        } else {
+          throw new Error("Failed to generate quiz questions");
+        }
+      } catch (aiError) {
+        console.error("Error generating quiz questions:", aiError);
+        // Delete the quiz if we couldn't generate questions
+        await storage.deleteQuiz(quiz.id);
+        return res.status(500).json({ 
+          message: "Failed to generate quiz questions with AI", 
+          error: aiError instanceof Error ? aiError.message : "Unknown error" 
+        });
+      }
     } catch (err) {
       next(err);
     }

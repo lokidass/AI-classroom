@@ -4,7 +4,6 @@ import { Input } from '@/components/ui/input';
 import { useQuery } from '@tanstack/react-query';
 import { webSocketClient } from '@/lib/websocket';
 import { useAuth } from '@/hooks/use-auth';
-import { Message } from '@shared/schema';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Loader2, Send } from 'lucide-react';
 
@@ -13,7 +12,12 @@ type ChatProps = {
   userId: number;
 };
 
-interface ChatMessage extends Message {
+interface ChatMessage {
+  id: number;
+  lectureId: number;
+  userId: number;
+  content: string;
+  timestamp: Date | string | null;
   user?: {
     id: number;
     username: string;
@@ -32,6 +36,7 @@ export default function Chat({ lectureId, userId }: ChatProps) {
   // Fetch initial messages
   const { data: initialMessages, isLoading } = useQuery<ChatMessage[]>({
     queryKey: [`/api/lectures/${lectureId}/messages`],
+    enabled: !!lectureId
   });
   
   // Set initial messages once loaded
@@ -156,7 +161,7 @@ export default function Chat({ lectureId, userId }: ChatProps) {
                       {message.user?.fullName || 'Unknown User'}
                     </span>
                     <span className="text-xs text-gray-500 ml-2">
-                      {new Date(message.timestamp).toLocaleTimeString()}
+                      {message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : ''}
                     </span>
                     {message.user?.role === 'teacher' && (
                       <span className="ml-2 text-xs bg-primary text-white px-2 py-0.5 rounded-full">

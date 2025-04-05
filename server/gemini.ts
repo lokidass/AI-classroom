@@ -124,7 +124,6 @@ export async function answerQuestion(question: string, lectureContext?: string) 
   }
 }
 
-// Function to process transcription segments and extract meaningful content
 // Function to list available models
 export async function listAvailableModels() {
   if (!API_KEY) {

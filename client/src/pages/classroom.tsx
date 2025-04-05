@@ -7,13 +7,14 @@ import { useParams, useLocation } from "wouter";
 import { Classroom, Assignment, Material, Lecture, Quiz, QuizQuestion } from "@shared/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Calendar, FileText, Video, Plus, Upload, BookOpen, ClipboardCheck, BookText as QuizIcon } from "lucide-react";
+import { Loader2, Calendar, FileText, Video, Plus, Upload, BookOpen, ClipboardCheck, BookText as QuizIcon, Brain } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { useState } from "react";
+import { Tabs as TabsComponent, TabsList as TabsListComponent, TabsTrigger as TabsTriggerComponent } from "@/components/ui/tabs";
 import { 
   Dialog, DialogContent, DialogDescription, DialogFooter, 
   DialogHeader, DialogTitle, DialogTrigger 
@@ -35,7 +36,6 @@ export default function ClassroomPage() {
   const [isAddAssignmentOpen, setIsAddAssignmentOpen] = useState(false);
   const [isAddMaterialOpen, setIsAddMaterialOpen] = useState(false);
   const [isCreateQuizOpen, setIsCreateQuizOpen] = useState(false);
-  const [isGenerateQuizOpen, setIsGenerateQuizOpen] = useState(false);
   
   const classroomId = id ? parseInt(id) : 0;
   
@@ -202,6 +202,35 @@ export default function ClassroomPage() {
     ),
   });
   
+  // Function to activate a quiz
+  const activateQuizMutation = useMutation({
+    mutationFn: async (quizId: number) => {
+      return await apiRequest(
+        "PATCH", 
+        `/api/quizzes/${quizId}/activate`, 
+        { isActive: true }
+      );
+    },
+    onSuccess: () => {
+      toast({
+        title: "Quiz activated",
+        description: "The quiz is now active and available to students.",
+      });
+      queryClient.invalidateQueries({ queryKey: [`/api/classrooms/${classroomId}/quizzes`] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to activate quiz",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const handleActivateQuiz = (quizId: number) => {
+    activateQuizMutation.mutate(quizId);
+  };
+  
   const quizGenerationForm = useForm<z.infer<typeof quizGenerationSchema>>({
     resolver: zodResolver(quizGenerationSchema),
     defaultValues: {
@@ -314,7 +343,7 @@ export default function ClassroomPage() {
         title: "Quiz generated",
         description: "Your quiz has been generated successfully using AI.",
       });
-      setIsGenerateQuizOpen(false);
+      setIsCreateQuizOpen(false);
       quizGenerationForm.reset();
       queryClient.invalidateQueries({ queryKey: [`/api/classrooms/${classroomId}/quizzes`] });
     },
@@ -610,14 +639,7 @@ export default function ClassroomPage() {
                 <div className="flex justify-between mb-4">
                   <h2 className="text-xl font-semibold">Quizzes</h2>
                   {user?.role === "teacher" && (
-                    <div className="space-x-2">
-                      <Button 
-                        onClick={() => setIsGenerateQuizOpen(true)}
-                        variant="outline"
-                      >
-                        <QuizIcon className="h-4 w-4 mr-2" />
-                        Generate Quiz with AI
-                      </Button>
+                    <div>
                       <Button onClick={() => setIsCreateQuizOpen(true)}>
                         <Plus className="h-4 w-4 mr-2" />
                         Create Quiz
@@ -655,11 +677,20 @@ export default function ClassroomPage() {
                           </p>
                         </CardContent>
                         <div className="p-4 pt-0 mt-auto">
-                          <Button variant="outline" className="w-full mb-2">
+                          <Button 
+                            variant="outline" 
+                            className="w-full mb-2"
+                            onClick={() => navigate(`/quizzes/${quiz.id}`)}
+                          >
                             View Quiz
                           </Button>
                           {user?.role === "teacher" && (
-                            <Button variant="outline" className="w-full" disabled={quiz.isActive === true}>
+                            <Button 
+                              variant="outline" 
+                              className="w-full" 
+                              disabled={quiz.isActive === true}
+                              onClick={() => handleActivateQuiz(quiz.id)}
+                            >
                               {quiz.isActive === true ? "Quiz is Active" : "Activate Quiz"}
                             </Button>
                           )}
@@ -679,9 +710,9 @@ export default function ClassroomPage() {
                       </p>
                       {user?.role === "teacher" && (
                         <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                          <Button onClick={() => setIsGenerateQuizOpen(true)} variant="outline">
+                          <Button onClick={() => setIsCreateQuizOpen(true)} variant="outline">
                             <QuizIcon className="h-4 w-4 mr-2" />
-                            Generate Quiz with AI
+                            Create Quiz
                           </Button>
                           <Button onClick={() => setIsCreateQuizOpen(true)}>
                             <Plus className="h-4 w-4 mr-2" />
@@ -953,198 +984,203 @@ export default function ClassroomPage() {
         </DialogContent>
       </Dialog>
       
-      {/* Create Quiz Dialog */}
+      {/* Quiz Creation Dialog with Tabs */}
       <Dialog open={isCreateQuizOpen} onOpenChange={setIsCreateQuizOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[650px]">
           <DialogHeader>
             <DialogTitle>Create Quiz</DialogTitle>
             <DialogDescription>
-              Create a new quiz for your class.
+              Create a new quiz for your class or generate one with AI.
             </DialogDescription>
           </DialogHeader>
           
-          <Form {...quizForm}>
-            <form onSubmit={quizForm.handleSubmit(onQuizSubmit)}>
-              <div className="space-y-4">
-                <FormField
-                  control={quizForm.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Title</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Quiz title" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={quizForm.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Provide details about the quiz"
-                          rows={3}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={quizForm.control}
-                  name="timeLimit"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Time Limit (minutes)</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder="e.g., 30"
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              
-              <DialogFooter className="mt-6">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsCreateQuizOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createQuizMutation.isPending}
-                >
-                  {createQuizMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    "Create Quiz"
-                  )}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Generate Quiz Dialog */}
-      <Dialog open={isGenerateQuizOpen} onOpenChange={setIsGenerateQuizOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Generate Quiz with AI</DialogTitle>
-            <DialogDescription>
-              Generate a quiz automatically using AI based on your content.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <Form {...quizGenerationForm}>
-            <form onSubmit={quizGenerationForm.handleSubmit(onQuizGenerationSubmit)}>
-              <div className="space-y-4">
-                <FormField
-                  control={quizGenerationForm.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Quiz Title</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Enter quiz title" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={quizGenerationForm.control}
-                  name="content"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Content to Generate Quiz From</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Paste the lecture notes, material content, or text you want to generate a quiz from..."
-                          rows={8}
-                          className="font-mono text-sm"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={quizGenerationForm.control}
-                  name="numQuestions"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Number of Questions</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          min={1}
-                          max={20}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              
-              <div className="bg-amber-50 p-4 rounded-md mt-4">
-                <h4 className="text-amber-800 font-medium flex items-center">
-                  <AlertCircle className="h-4 w-4 mr-2" />
-                  Note
-                </h4>
-                <p className="text-amber-700 text-sm mt-1">
-                  Quiz generation uses Google's Gemini AI to create questions based on your content. The process may take 
-                  a few moments depending on the length of your content and the number of questions requested.
-                </p>
-              </div>
-              
-              <DialogFooter className="mt-6">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsGenerateQuizOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={generateQuizMutation.isPending}
-                >
-                  {generateQuizMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Generating Quiz...
-                    </>
-                  ) : (
-                    "Generate Quiz"
-                  )}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+          <Tabs defaultValue="manual">
+            <TabsList className="grid grid-cols-2 mb-4">
+              <TabsTrigger value="manual">
+                <Plus className="h-4 w-4 mr-2" />
+                Manual Creation
+              </TabsTrigger>
+              <TabsTrigger value="ai">
+                <Brain className="h-4 w-4 mr-2" />
+                AI Generation
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="manual">
+              <Form {...quizForm}>
+                <form onSubmit={quizForm.handleSubmit(onQuizSubmit)}>
+                  <div className="space-y-4">
+                    <FormField
+                      control={quizForm.control}
+                      name="title"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Title</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Quiz title" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={quizForm.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Description</FormLabel>
+                          <FormControl>
+                            <Textarea 
+                              placeholder="Provide details about the quiz"
+                              rows={3}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={quizForm.control}
+                      name="timeLimit"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Time Limit (minutes)</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              placeholder="e.g., 30"
+                              {...field} 
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  <DialogFooter className="mt-6">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsCreateQuizOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={createQuizMutation.isPending}
+                    >
+                      {createQuizMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        "Create Quiz"
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </TabsContent>
+            
+            <TabsContent value="ai">
+              <Form {...quizGenerationForm}>
+                <form onSubmit={quizGenerationForm.handleSubmit(onQuizGenerationSubmit)}>
+                  <div className="space-y-4">
+                    <FormField
+                      control={quizGenerationForm.control}
+                      name="title"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Quiz Title</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Enter quiz title" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={quizGenerationForm.control}
+                      name="content"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Content to Generate Quiz From</FormLabel>
+                          <FormControl>
+                            <Textarea 
+                              placeholder="Paste the lecture notes, material content, or text you want to generate a quiz from..."
+                              rows={8}
+                              className="font-mono text-sm"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={quizGenerationForm.control}
+                      name="numQuestions"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Number of Questions</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number" 
+                              min={1}
+                              max={20}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  <div className="bg-amber-50 p-4 rounded-md mt-4">
+                    <h4 className="text-amber-800 font-medium flex items-center">
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      Note
+                    </h4>
+                    <p className="text-amber-700 text-sm mt-1">
+                      Quiz generation uses Google's Gemini AI to create questions based on your content. The process may take 
+                      a few moments depending on the length of your content and the number of questions requested.
+                    </p>
+                  </div>
+                  
+                  <DialogFooter className="mt-6">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsCreateQuizOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={generateQuizMutation.isPending}
+                    >
+                      {generateQuizMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Generating Quiz...
+                        </>
+                      ) : (
+                        "Generate Quiz"
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </div>

@@ -807,7 +807,7 @@ export default function VideoInterface({ lectureId, isTeacher }: VideoInterfaceP
           }, 100);
         } else if (event.error === 'network') {
           // Network errors are common in development and browser environments
-          // This happens especially in sandboxed environments like Replit
+
           
           networkRetryCountRef.current += 1;
           

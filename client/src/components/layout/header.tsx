@@ -57,7 +57,7 @@ export default function Header() {
           </button>
           <Link href="/" className="flex items-center ml-2">
             <School className="text-primary mr-2 h-6 w-6" />
-            <h1 className="font-medium text-xl">EduGenius</h1>
+            <h1 className="font-medium text-xl">VerboClass</h1>
           </Link>
         </div>
         

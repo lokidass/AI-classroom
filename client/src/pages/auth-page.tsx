@@ -77,7 +77,7 @@ export default function AuthPage() {
           <div className="flex items-center">
             <div className="flex items-center ml-2">
               <School className="text-primary mr-2 h-6 w-6" />
-              <h1 className="font-medium text-xl">EduGenius</h1>
+              <h1 className="font-medium text-xl">VerboClass</h1>
             </div>
           </div>
         </div>
@@ -93,7 +93,7 @@ export default function AuthPage() {
               <CardDescription>
                 {activeTab === "login"
                   ? "Enter your credentials to sign in to your account"
-                  : "Sign up for a new EduGenius account"}
+                  : "Sign up for a new VerboClass account"}
               </CardDescription>
             </CardHeader>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -250,7 +250,7 @@ export default function AuthPage() {
         <div className="hidden lg:flex flex-1 bg-primary items-center justify-center p-6 text-white">
           <div className="max-w-md">
             <School className="h-12 w-12 mb-4" />
-            <h2 className="text-3xl font-bold mb-4">EduGenius Smart Classroom</h2>
+            <h2 className="text-3xl font-bold mb-4">VerboClass Smart Classroom</h2>
             <p className="mb-6">
               Transform your learning experience with AI-powered virtual classrooms. Join live lectures, get automatic note generation, and interact with an intelligent learning assistant.
             </p>
